@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <defines.h>
+#include <string.h>
 
 #if defined _WIN32
 #include <Windows.h>
@@ -83,6 +84,22 @@ bool CheckAvailableInstanceExtensions(Vec VkExtensionProperties_available_extens
 	return true;
 }
 
+/* A function for checking is a given extension is supported */
+/* @param Pass in a Vector of available extensions */
+/* @param Pass in the name of the extension to be checked */
+bool IsExtensionSupported(Vec VkExtensionProperties_available_extensions, const char* extension)
+{
+	/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
+	for (int i = 0; i < vec_length(VkExtensionProperties_available_extensions); ++i) {
+		VkExtensionProperties* available_extension = (VkExtensionProperties*)vec_get_at(VkExtensionProperties_available_extensions, i);
+		if (strstr(available_extension->extensionName, extension)) {
+
+			return true;
+		}
+	}
+	return false;
+}
+
 /* A function that creates a Vulkan Instance */
 /* @param Pass in a Vector that has the Desired Extensions */
 /* @param A string for the application name */
@@ -92,4 +109,10 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 	Vec available_extensions = vec_create(VkExtensionProperties);
 	if (!CheckAvailableInstanceExtensions(available_extensions))
 		return false;
+	
+	/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
+	for (int i = 0; i < vec_length(available_extensions); ++i)
+	{
+		if(!IsExtensionSupported)
+	}
 }

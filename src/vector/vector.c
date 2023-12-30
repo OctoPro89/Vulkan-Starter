@@ -145,6 +145,21 @@ void* vec_pop_at(void* arr, u64 index, void* dest)
 	}
 }
 
+void* _vec_get_at(void* arr, u64 index)
+{
+	u64 vecSize = sizeof(vec);
+	vec* vector = (vec*)((u8*)arr - vecSize);
+
+	if (index >= vector->length)
+	{
+		printf("ERROR: Index out of bounds in Vector on _vec_get_at! Length: %i, Index: %i\n", (int)vector->length, (int)index);
+		return nullptr;
+	}
+
+	u64 addr = (u64)arr + index * vector->stride;
+	return (void*)addr;
+}
+
 void vec_clear(void* arr)
 {
 	vec_length_set(arr, 0);

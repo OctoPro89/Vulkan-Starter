@@ -12,14 +12,14 @@
 
 #define vec_pushback(arr, value, type)	\
 {									\
-type temp = value;			\
-arr = _vec_pushback(arr, &temp);	\
+	type temp = value;			\
+	arr = _vec_pushback(arr, &temp);	\
 }
 
 #define vec_insert(arr, index, value, type) \
 {									  \
-type temp = value;			  \
-arr = _vec_insert(arr, index, &temp); \
+	type temp = value;			  \
+	arr = _vec_insert(arr, index, &temp); \
 }
 
 #define vec_insert_at(arr, index, value, type) \
@@ -36,6 +36,7 @@ void* _vec_insert_at(void* arr, u64 index, void* value_ptr);
 void   vec_destroy(void* arr);
 void  _vec_pop(void* arr, void* dest);
 void*  vec_pop_at(void* arr, u64 index, void* dest);
+void*  vec_get_at(void* arr, u64 index);
 void   vec_clear(void* arr);
 u64    vec_capacity(void* arr);
 u64    vec_length(void* arr);
