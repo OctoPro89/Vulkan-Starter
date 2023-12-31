@@ -97,8 +97,8 @@ void vec_destroy(void* arr)
 	{
 		u64 vecSize = sizeof(vec);
 		vec* vector = (vec*)((u8*)arr - vecSize);
-		u64 totalSize = vecSize + vector->capacity * vector->stride;
-		free(vector, totalSize);
+		//  u64 totalSize = vecSize + vector->capacity * vector->stride;
+		free(vector);
 	}
 }
 
@@ -145,7 +145,7 @@ void* vec_pop_at(void* arr, u64 index, void* dest)
 	}
 }
 
-void* _vec_get_at(void* arr, u64 index)
+void* vec_get_at(void* arr, u64 index)
 {
 	u64 vecSize = sizeof(vec);
 	vec* vector = (vec*)((u8*)arr - vecSize);

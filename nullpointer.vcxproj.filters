@@ -18,7 +18,6 @@
     <None Include="shaders\compileshaders.bat">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="src\VulkanFunctions.c" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.c">
@@ -30,12 +29,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\defines.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="include\VulkanFunctions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="include\VulkanDefines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\vector\vector.h">

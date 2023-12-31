@@ -160,7 +160,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="shaders\compileshaders.bat" />
-    <None Include="src\VulkanFunctions.c" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.c" />
@@ -170,8 +169,6 @@
     <ClInclude Include="include\defines.h" />
     <ClInclude Include="include\vector\vector.h" />
     <ClInclude Include="include\VkHelper\VkHelper.h" />
-    <ClInclude Include="include\VulkanDefines.h" />
-    <ClInclude Include="include\VulkanFunctions.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

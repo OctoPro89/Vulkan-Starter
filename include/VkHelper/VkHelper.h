@@ -3,67 +3,13 @@
 #include <stdio.h>
 #include <defines.h>
 #include <string.h>
-
-#if defined _WIN32
-#include <Windows.h>
-#define LIBRARY_TYPE HMODULE
-#define LoadFunction GetProcAddress
-#elif defined __linux
-#define LoadFunction dlsym
-#endif
-
-/* A function for connecting vulkan with the dynamic link library */
-/* @param A pointer to the type of library (HMODULE on Window) */
-bool ConnectWithVulkanLoaderLibrary(LIBRARY_TYPE* vulkan_library)
-{
-#if defined _WIN32
-	*vulkan_library = LoadLibrary(L"vulkan-1.dll");
-#elif defined __linux
-	*vulkan_library = dlopen("libvulkan.so.1", RTLD_NOW);
-#endif
-
-	if (*vulkan_library == nullptr) {
-		printf("Could not connect with a Vulkan Runtime library.\n");
-		return false;
-	}
-
-	return true;
-}
-
-/* A function for loading exported vulkan loader library functions */
-/* @param A const pointer to the library type (HMODULE on Windows) */
-bool LoadFunctionExportedFromVulkanLoaderLibrary(const LIBRARY_TYPE* vulkan_library) {
-	#define EXPORTED_VULKAN_FUNCTION( name )								 \
-    name = (PFN_##name)LoadFunction( *vulkan_library, #name );				 \
-    if( name == nullptr ) {													 \
-		printf("Could not load exported Vulkan function named: %s\n", name); \
-        return false;														 \
-    }
-
-	#include <VulkanFunctions.h>
-
-	return true;
-}
-
-/* A function for loading global level vulkan functions */
-bool LoadGlobalLevelFunctions() {
-#define GLOBAL_LEVEL_VULKAN_FUNCTION( name )										\
-    name = (PFN_##name)vkGetInstanceProcAddr( nullptr, #name );						\
-    if( name == nullptr ) {															\
-		printf("Could not load global level Vulkan function named: %s\n", name);	\
-		return false;																\
-    }
-
-	#include <VulkanDefines.h>
-
-	return true;
-}
+#include <vector\vector.h>
 
 /* A function for checking the available instance extensions */
 /* @param Pass in a nullptr vector which will be modified to reserve a size suffecient enough for the extensions */
 bool CheckAvailableInstanceExtensions(Vec VkExtensionProperties_available_extensions)
 {
-	uint32_t extensions_count = 0;
+	u32 extensions_count = 0;
 	VkResult result = VK_SUCCESS;
 
 	result = vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, nullptr);
@@ -113,36 +59,164 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 		return false;
 	
 	/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
-	for (int i = 0; i < vec_length(available_extensions); ++i)
+	for (int i = 0; i < vec_length(ConstCharPointer_desired_extensions); ++i)
 	{
 		/* Loop through the available extensions to see if the desired ones are available */
 		VkExtensionProperties* extension = (VkExtensionProperties*)vec_get_at(ConstCharPointer_desired_extensions, i);
-		if (!IsExtensionSupported(available_extensions, extension))
+		if (!IsExtensionSupported(available_extensions, extension->extensionName))
 		{
 			printf("ERROR: Extension named \"%s\" is not supported but needed!", extension->extensionName);
 			return false;
 		}
-
-		VkApplicationInfo applicationInfo =
-		{
-			VK_STRUCTURE_TYPE_APPLICATION_INFO,
-			nullptr,
-			applicationName,
-			VK_MAKE_VERSION(1, 0, 0),
-			"nullpointer",
-			VK_MAKE_VERSION(1, 0, 0),
-			VK_MAKE_VERSION(1, 0, 0)
-		};
-
-		VkInstanceCreateInfo instanceCreateInfo =
-		{
-			VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-			nullptr,
-			0,
-			&applicationInfo,
-			0,
-			nullptr,
-			static_cast<uint32_t>();
-		};
 	}
+
+	VkApplicationInfo applicationInfo =
+	{
+		VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		nullptr,
+		applicationName,
+		VK_MAKE_VERSION(1, 0, 0),
+		"nullpointer",
+		VK_MAKE_VERSION(1, 0, 0),
+		VK_MAKE_VERSION(1, 0, 0)
+	};
+
+	VkInstanceCreateInfo instanceCreateInfo =
+	{
+		VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+		nullptr,
+		0,
+		&applicationInfo,
+		0,
+		nullptr,
+		vec_length(ConstCharPointer_desired_extensions),
+		vec_length(ConstCharPointer_desired_extensions) > 0 ? vec_get_at(ConstCharPointer_desired_extensions, 0) : nullptr
+	};
+
+	VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, instance);
+	if ((result != VK_SUCCESS) || (instance == VK_NULL_HANDLE))
+	{
+		printf("o crap\n");
+		return false;
+	}
+	
+	vec_destroy(available_extensions);
+
+	return true;
 }
+
+/* A function to get the available physical devices */
+/* @param the VkInstance to get screened */
+/* @param A Vector to be filled with VkPhysicalDevices for the available devices */
+bool EnumerateAvailablePhysicalDevices(VkInstance instance, Vec VkPhysicalDevice_available_devices)
+{
+	u32 devices_count = 0;
+	VkResult result = VK_SUCCESS;
+
+	result = vkEnumeratePhysicalDevices(instance, &devices_count, nullptr);
+	if ((result != VK_SUCCESS) || (devices_count = 0))
+	{
+		printf("ERROR: Could not get the number of available physical devices\n");
+		return false;
+	}
+
+	VkPhysicalDevice_available_devices = vec_reserve(VkPhysicalDevice, devices_count);
+	result = vkEnumeratePhysicalDevices(instance, &devices_count, vec_get_at(VkPhysicalDevice_available_devices, 0));
+	if ((result != VK_SUCCESS) || (devices_count == 0))
+	{
+		printf("ERROR: Could not enumerate physical devices\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to get the available extensions for a given device */
+/* @param The Physical Device to be screened */
+/* @param A Vector for the available extensions */
+bool CheckAvailableDeviceExtensions(VkPhysicalDevice physical_device, Vec VkExtensionProperties_available_extensions)
+{
+	u32 extensions_count = 0;
+	VkResult result = VK_SUCCESS;
+
+	result = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &extensions_count, nullptr);
+	if ((result != VK_SUCCESS) || (extensions_count == 0))
+	{
+		printf("ERROR: Could not get the number of device extensions.\n");
+		return false;
+	}
+
+	VkExtensionProperties_available_extensions = vec_reserve(VkExtensionProperties, extensions_count);
+	result = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &extensions_count, vec_get_at(VkExtensionProperties_available_extensions, 0));
+	if ((result != VK_SUCCESS) || (extensions_count == 0))
+	{
+		printf("ERROR: Could not enumerate device extensions.\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to get the features and properties of a physical device */
+/* @param The physical device to be screened */
+/* @param A pointer to a VkPhysicalDeviceFeatures to be filled in */
+/* @param A pointer to a VkPhysicalDeviceProperties to be filled in */
+void GetFeaturesAndPropertiesOfPhysicalDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* deviceFeatures, VkPhysicalDeviceProperties* deviceProperties)
+{
+	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+}
+
+/* A function to check the available Queue Families and their properties */
+/* @param The physical device to be screened */
+/* @param A Vector of VkQueueFamilyProperties to be filled in with properties */
+bool CheckAvailableQueueFamiliesAndTheirProperties(VkPhysicalDevice physicalDevice, Vec VkQueueFamilyProperties_queue_families)
+{
+	u32 queueFamiliesCount = 0;
+
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamiliesCount, nullptr);
+	if (queueFamiliesCount == 0)
+	{
+		printf("ERROR: Could not get the number of queue families.\n");
+		return false;
+	}
+
+	VkQueueFamilyProperties_queue_families = vec_reserve(VkQueueFamilyProperties, queueFamiliesCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamiliesCount, (VkQueueFamilyProperties*)VkQueueFamilyProperties_queue_families);
+	if (queueFamiliesCount == 0)
+	{
+		printf("ERROR: Could not get properties of queue families.");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to select an index of a queue family with the desired capabilities */
+/* @param The physical device to be screened */
+/* @param The desired capabilities wanted */
+/* @param An unsigned 32 bit integer for the output index */
+bool SelectIndexOfQueueFamilyWithDesiredCapabilities(VkPhysicalDevice physicalDevice, VkQueueFlags desiredCapabilities, u32* queueFamilyIndex)
+{
+	Vec queueFamilies = nullptr;
+	if(!CheckAvailableQueueFamiliesAndTheirProperties(physicalDevice, queueFamilies))
+		return false;
+	for (u32 index = 0; index < (u32)(vec_length(queueFamilies)); ++index)
+	{
+		VkQueueFamilyProperties* indexProperties = (VkQueueFamilyProperties*)vec_get_at(queueFamilies, index);
+		if ((indexProperties->queueCount > 0) &&
+			(indexProperties->queueFlags & desiredCapabilities))
+		{
+			queueFamilyIndex = index;
+			return true;
+		}
+	}
+	return false;
+}
+
+/* A structure of data to hold data about a queue */
+struct QueueInfo {
+	u32 FamilyIndex;
+	Vec Float_Priorities;
+};
+
