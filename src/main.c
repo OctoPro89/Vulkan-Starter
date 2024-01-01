@@ -5,25 +5,38 @@
 #include <vector/vector.h>
 #include <VkHelper/VkHelper.h>
 
-bool Initialize(Vec availableExtensions)
+bool Start()
 {
-	if (!CheckAvailableInstanceExtensions(availableExtensions))
+	Vec availableExtensions = nullptr;
+	Vec desiredExtensions = vec_create(VkExtensionProperties);
+	VkInstance Inst;
+	VkDevice logicalDevice;
+
+	availableExtensions = CheckAvailableInstanceExtensions();
+	if (availableExtensions == nullptr)
 		return false;
 
-	//if (!CreateVulkanInstance(nullptr, "nullpointer", *Instance))
+	VkExtensionProperties* lol = vec_get_at(availableExtensions, 0);
+
+	vec_pushback(desiredExtensions, *lol, VkExtensionProperties);
+
+	if (!CreateVulkanInstance(desiredExtensions, "nullpointer", &Inst))
+		return false;
+
+	PrintAvailableInstanceExtensionsFromVector(availableExtensions);
+
+	vec_destroy(availableExtensions);
+	vec_destroy(desiredExtensions);
 
 	return true;
 }
 
 int main(int argc, char** argv[])
 {
-	Vec availableExtensions = nullptr;
-	Vec desiredExtensions = vec_reserve(VkExtensionProperties, 1);
-	if (!Initialize(availableExtensions))
+	if (!Start())
 		exit(1);
 
-	vec_destroy(availableExtensions);
-	vec_destroy(desiredExtensions);
+	while (true);
 	
 	return 0;
 }

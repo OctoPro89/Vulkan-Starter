@@ -28,6 +28,12 @@
 	arr = _vec_insert_at(arr, index, &temp); \
 }
 
+#define vec_resize(arr, size, type) \
+{									\
+	arr = vec_reserve(type, size);  \
+	vec_length_set(arr, size);		\
+}
+
 void* _vec_create(u64 length, u64 stride);
 void* _vec_resize(void* arr);
 void* _vec_pushback(void* arr, const void* value_ptr);

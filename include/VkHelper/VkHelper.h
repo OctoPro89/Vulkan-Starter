@@ -6,30 +6,29 @@
 #include <vector\vector.h>
 
 /* A function for checking the available instance extensions */
-/* @param Pass in a nullptr vector which will be modified to reserve a size suffecient enough for the extensions */
-bool CheckAvailableInstanceExtensions(Vec VkExtensionProperties_available_extensions)
+/* @param Pass in a vector which will be resized a size suffecient enough for the extensions */
+Vec CheckAvailableInstanceExtensions()
 {
-	u32 extensions_count = 0;
+	Vec tempVec = vec_create(VkExtensionProperties);
+	uint32_t extensions_count = 0;
 	VkResult result = VK_SUCCESS;
 
 	result = vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, nullptr);
-	if ((result != VK_SUCCESS) || (extensions_count == 0))
-	{
-		printf("Could not get the number of Instance Extensions!\n");
-		return false;
+	if ((result != VK_SUCCESS) ||
+		(extensions_count == 0)) {
+		printf("ERROR: Could not get the number of instance extensions.\n");
+		return nullptr;
 	}
 
-	/* reserve memory to fit the needs of the vkEnumerateInstanceExtensionProperties */
-	VkExtensionProperties_available_extensions = vec_reserve(VkExtensionProperties, extensions_count);
-
-	result = vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, (VkExtensionProperties*)VkExtensionProperties_available_extensions);
-	if ((result != VK_SUCCESS) || (extensions_count == 0))
-	{
-		printf("Could not enumerate Instance extensions!\n");
-		return false;
+	vec_resize(tempVec, extensions_count, VkExtensionProperties);
+	result = vkEnumerateInstanceExtensionProperties(nullptr, &extensions_count, (VkExtensionProperties*)tempVec);
+	if ((result != VK_SUCCESS) ||
+		(extensions_count == 0)) {
+		printf("ERROR: Could not enumerate instance extensions.\n");
+		return nullptr;
 	}
 
-	return true;
+	return tempVec;
 }
 
 /* A function for checking is a given extension is supported */
@@ -52,10 +51,10 @@ bool IsExtensionSupported(Vec VkExtensionProperties_available_extensions, const 
 /* @param Pass in a Vector that has the Desired Extensions */
 /* @param A string for the application name */
 /* @param The VkInstance to be created */
-bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* applicationName, VkInstance* instance)
+bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* applicationName, VkInstance* Inst)
 {
-	Vec available_extensions = vec_create(VkExtensionProperties);
-	if (!CheckAvailableInstanceExtensions(available_extensions))
+	Vec available_extensions = CheckAvailableInstanceExtensions();
+	if (available_extensions == nullptr)
 		return false;
 	
 	/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
@@ -70,36 +69,25 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 		}
 	}
 
-	VkApplicationInfo applicationInfo =
-	{
-		VK_STRUCTURE_TYPE_APPLICATION_INFO,
-		nullptr,
-		applicationName,
-		VK_MAKE_VERSION(1, 0, 0),
-		"nullpointer",
-		VK_MAKE_VERSION(1, 0, 0),
-		VK_MAKE_VERSION(1, 0, 0)
-	};
+	// Create Vulkan instance
+	VkApplicationInfo appInfo = { 0 };
+	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName = "nullpointer";
+	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.pEngineName = "Nullpointer Engine";
+	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.apiVersion = VK_API_VERSION_1_0;
 
-	VkInstanceCreateInfo instanceCreateInfo =
-	{
-		VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		nullptr,
-		0,
-		&applicationInfo,
-		0,
-		nullptr,
-		vec_length(ConstCharPointer_desired_extensions),
-		vec_length(ConstCharPointer_desired_extensions) > 0 ? vec_get_at(ConstCharPointer_desired_extensions, 0) : nullptr
-	};
-
-	VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, instance);
-	if ((result != VK_SUCCESS) || (instance == VK_NULL_HANDLE))
-	{
-		printf("o crap\n");
+	VkInstanceCreateInfo createInfo = { 0 };
+	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	createInfo.pApplicationInfo = &appInfo;
+	if (vkCreateInstance(&createInfo, nullptr, Inst) != VK_SUCCESS) {
+		// Handle instance creation failure
+		printf("ERROR: Could not create Vulkan instance");
+		vec_destroy(available_extensions);
 		return false;
 	}
-	
+
 	vec_destroy(available_extensions);
 
 	return true;
@@ -163,8 +151,8 @@ bool CheckAvailableDeviceExtensions(VkPhysicalDevice physical_device, Vec VkExte
 /* @param A pointer to a VkPhysicalDeviceProperties to be filled in */
 void GetFeaturesAndPropertiesOfPhysicalDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* deviceFeatures, VkPhysicalDeviceProperties* deviceProperties)
 {
-	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+	vkGetPhysicalDeviceFeatures(physicalDevice, deviceFeatures);
+	vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties);
 }
 
 /* A function to check the available Queue Families and their properties */
@@ -207,7 +195,7 @@ bool SelectIndexOfQueueFamilyWithDesiredCapabilities(VkPhysicalDevice physicalDe
 		if ((indexProperties->queueCount > 0) &&
 			(indexProperties->queueFlags & desiredCapabilities))
 		{
-			queueFamilyIndex = index;
+			queueFamilyIndex = &index;
 			return true;
 		}
 	}
@@ -215,8 +203,86 @@ bool SelectIndexOfQueueFamilyWithDesiredCapabilities(VkPhysicalDevice physicalDe
 }
 
 /* A structure of data to hold data about a queue */
-struct QueueInfo {
+typedef struct {
 	u32 FamilyIndex;
 	Vec Float_Priorities;
-};
+} QueueInfo;
 
+/* A function to create a logical device */
+/* @param The physical device */
+/* @param A Vector of Queue Infos */
+/* @param A Vector of strings (char*) of the desired extensions */
+/* @param Some VkPhysicalDeviceFeatures for the features of the physical device */
+/* @param The logical device to be filled */
+bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, Vec QueueInfo_queue_infos, Vec Char_desired_extensions, VkPhysicalDeviceFeatures* desired_features, VkDevice* logicalDevice)
+{
+	Vec VkExtensionProperties_available_extensions = nullptr;
+	if (!CheckAvailableDeviceExtensions(physicalDevice, VkExtensionProperties_available_extensions))
+		return false;
+
+	for (int i = 0; i < vec_length(Char_desired_extensions); ++i)
+	{
+		char* extension = (char*)vec_get_at(Char_desired_extensions, i);
+		if (!IsExtensionSupported(VkExtensionProperties_available_extensions, extension))
+		{
+			printf("ERROR: Extension named: \"%s\" is not supported by a physical device\n", extension);
+			return false;
+		}
+		/* NOTE: Should probably free(extension); */
+	}
+
+	Vec VkDeviceQueueCreateInfo_queue_create_info = nullptr;
+	for (int i = 0; i < vec_length(QueueInfo_queue_infos); ++i)
+	{
+		QueueInfo* info = (QueueInfo*)vec_get_at(QueueInfo_queue_infos, i);
+		VkDeviceQueueCreateInfo newInfo =
+		{
+			VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+			nullptr,
+			0,
+			info->FamilyIndex,
+			(u32)(vec_length(info->Float_Priorities)),
+			(const float*)info
+		};
+		vec_pushback(VkDeviceQueueCreateInfo_queue_create_info, newInfo, VkDeviceQueueCreateInfo);
+		/* NOTE: Probably should free(info); here */
+	}
+
+	VkDeviceCreateInfo deviceCreateInfo =
+	{
+		VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		nullptr,
+		0,
+		(u32)(vec_length(VkDeviceQueueCreateInfo_queue_create_info)),
+		vec_length(VkDeviceQueueCreateInfo_queue_create_info) ? vec_get_at(VkDeviceQueueCreateInfo_queue_create_info, 0) : nullptr,
+		0,
+		nullptr,
+		(u32)(vec_length(Char_desired_extensions)),
+		vec_length(Char_desired_extensions) > 0 ? vec_get_at(Char_desired_extensions, 0) : nullptr,
+		desired_features
+	};
+
+	VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, logicalDevice);
+	if ((result != VK_SUCCESS) || (logicalDevice == VK_NULL_HANDLE))
+	{
+		printf("ERROR: Could not create logical device.\n");
+		return false;
+	}
+
+	return true;
+
+	vec_destroy(VkExtensionProperties_available_extensions);
+	vec_destroy(VkDeviceQueueCreateInfo_queue_create_info);
+}
+
+/* A function that prints out available extensions from vulkan that are instance level */
+/* @param the vector containing the extension data */
+void PrintAvailableInstanceExtensionsFromVector(Vec extensionsVector)
+{
+	u32 temp = (u32)vec_length(extensionsVector);
+	for (u32 i = 0; i < vec_length(extensionsVector); ++i)
+	{
+		VkExtensionProperties* extension = vec_get_at(extensionsVector, i);
+		printf("AVAILABLE EXTENSION: NAME: %s, SPECIFICATION VERSION: %d\n", extension->extensionName, (int)extension->specVersion);
+	}
+}
