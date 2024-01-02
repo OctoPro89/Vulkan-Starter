@@ -1,12 +1,13 @@
 #pragma once
+#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <defines.h>
 #include <string.h>
 #include <vector\vector.h>
+#include <WindowHelper/WindowHelper.h>
 
 /* A function for checking the available instance extensions */
-/* @param Pass in a vector which will be resized a size suffecient enough for the extensions */
 Vec CheckAvailableInstanceExtensions()
 {
 	Vec tempVec = vec_create(VkExtensionProperties);
@@ -40,7 +41,6 @@ bool IsExtensionSupported(Vec VkExtensionProperties_available_extensions, const 
 	for (int i = 0; i < vec_length(VkExtensionProperties_available_extensions); ++i) {
 		VkExtensionProperties* available_extension = (VkExtensionProperties*)vec_get_at(VkExtensionProperties_available_extensions, i);
 		if (strstr(available_extension->extensionName, extension)) {
-
 			return true;
 		}
 	}
@@ -48,7 +48,7 @@ bool IsExtensionSupported(Vec VkExtensionProperties_available_extensions, const 
 }
 
 /* A function that creates a Vulkan Instance */
-/* @param Pass in a Vector that has the Desired Extensions */
+/* @param Pass in a Vector that has the Desired Extensions, pass in null if you don't need extra extensions */
 /* @param A string for the application name */
 /* @param The VkInstance to be created */
 bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* applicationName, VkInstance* Inst)
@@ -56,16 +56,20 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 	Vec available_extensions = CheckAvailableInstanceExtensions();
 	if (available_extensions == nullptr)
 		return false;
-	
-	/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
-	for (int i = 0; i < vec_length(ConstCharPointer_desired_extensions); ++i)
+
+	/* Don't loop through if we don't need extra extensions */
+	if (ConstCharPointer_desired_extensions != nullptr)
 	{
-		/* Loop through the available extensions to see if the desired ones are available */
-		VkExtensionProperties* extension = (VkExtensionProperties*)vec_get_at(ConstCharPointer_desired_extensions, i);
-		if (!IsExtensionSupported(available_extensions, extension->extensionName))
+		/* Doing the array / vector loop the old fashioned way because we can't use ranged based loop */
+		for (int i = 0; i < vec_length(ConstCharPointer_desired_extensions); ++i)
 		{
-			printf("ERROR: Extension named \"%s\" is not supported but needed!", extension->extensionName);
-			return false;
+			/* Loop through the available extensions to see if the desired ones are available */
+			const char** extension = (const char**)vec_get_at(ConstCharPointer_desired_extensions, i);
+			if (!IsExtensionSupported(available_extensions, *extension))
+			{
+				printf("ERROR: Extension named \"%s\" is not supported but needed!", (char*)*extension);
+				return false;
+			}
 		}
 	}
 
@@ -95,143 +99,162 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 
 /* A function to get the available physical devices */
 /* @param the VkInstance to get screened */
-/* @param A Vector to be filled with VkPhysicalDevices for the available devices */
-bool EnumerateAvailablePhysicalDevices(VkInstance instance, Vec VkPhysicalDevice_available_devices)
+Vec EnumerateAvailablePhysicalDevices(VkInstance* instance)
 {
 	u32 devices_count = 0;
 	VkResult result = VK_SUCCESS;
+	Vec tempDeviceVec = vec_create(VkPhysicalDevice);
 
-	result = vkEnumeratePhysicalDevices(instance, &devices_count, nullptr);
-	if ((result != VK_SUCCESS) || (devices_count = 0))
+	result = vkEnumeratePhysicalDevices(*instance, &devices_count, nullptr);
+	if ((result != VK_SUCCESS) || (devices_count == 0))
 	{
 		printf("ERROR: Could not get the number of available physical devices\n");
-		return false;
+		vec_destroy(tempDeviceVec);
+		return nullptr;
 	}
 
-	VkPhysicalDevice_available_devices = vec_reserve(VkPhysicalDevice, devices_count);
-	result = vkEnumeratePhysicalDevices(instance, &devices_count, vec_get_at(VkPhysicalDevice_available_devices, 0));
+	vec_resize(tempDeviceVec, devices_count, VkPhysicalDevice);
+	result = vkEnumeratePhysicalDevices(*instance, &devices_count, (VkPhysicalDevice*)tempDeviceVec);
 	if ((result != VK_SUCCESS) || (devices_count == 0))
 	{
 		printf("ERROR: Could not enumerate physical devices\n");
-		return false;
+		vec_destroy(tempDeviceVec);
+		return nullptr;
 	}
 
-	return true;
+	return tempDeviceVec;
 }
 
 /* A function to get the available extensions for a given device */
 /* @param The Physical Device to be screened */
 /* @param A Vector for the available extensions */
-bool CheckAvailableDeviceExtensions(VkPhysicalDevice physical_device, Vec VkExtensionProperties_available_extensions)
+Vec CheckAvailableDeviceExtensions(VkPhysicalDevice* physical_device)
 {
+	Vec tempVecExtensionProperties = vec_create(VkExtensionProperties);
 	u32 extensions_count = 0;
 	VkResult result = VK_SUCCESS;
 
-	result = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &extensions_count, nullptr);
+	result = vkEnumerateDeviceExtensionProperties(*physical_device, nullptr, &extensions_count, nullptr);
 	if ((result != VK_SUCCESS) || (extensions_count == 0))
 	{
 		printf("ERROR: Could not get the number of device extensions.\n");
-		return false;
+		vec_destroy(tempVecExtensionProperties);
+		return nullptr;
 	}
 
-	VkExtensionProperties_available_extensions = vec_reserve(VkExtensionProperties, extensions_count);
-	result = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &extensions_count, vec_get_at(VkExtensionProperties_available_extensions, 0));
+	vec_resize(tempVecExtensionProperties, extensions_count, VkExtensionProperties);
+	result = vkEnumerateDeviceExtensionProperties(*physical_device, nullptr, &extensions_count, vec_get_at(tempVecExtensionProperties, 0));
 	if ((result != VK_SUCCESS) || (extensions_count == 0))
 	{
 		printf("ERROR: Could not enumerate device extensions.\n");
-		return false;
+		vec_destroy(tempVecExtensionProperties);
+		return nullptr;
 	}
 
-	return true;
+	return tempVecExtensionProperties;
 }
 
 /* A function to get the features and properties of a physical device */
 /* @param The physical device to be screened */
 /* @param A pointer to a VkPhysicalDeviceFeatures to be filled in */
 /* @param A pointer to a VkPhysicalDeviceProperties to be filled in */
-void GetFeaturesAndPropertiesOfPhysicalDevice(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* deviceFeatures, VkPhysicalDeviceProperties* deviceProperties)
+void GetFeaturesAndPropertiesOfPhysicalDevice(VkPhysicalDevice* physicalDevice, VkPhysicalDeviceFeatures* deviceFeatures, VkPhysicalDeviceProperties* deviceProperties)
 {
-	vkGetPhysicalDeviceFeatures(physicalDevice, deviceFeatures);
-	vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties);
+	vkGetPhysicalDeviceFeatures(*physicalDevice, deviceFeatures);
+	vkGetPhysicalDeviceProperties(*physicalDevice, deviceProperties);
 }
 
 /* A function to check the available Queue Families and their properties */
 /* @param The physical device to be screened */
 /* @param A Vector of VkQueueFamilyProperties to be filled in with properties */
-bool CheckAvailableQueueFamiliesAndTheirProperties(VkPhysicalDevice physicalDevice, Vec VkQueueFamilyProperties_queue_families)
+Vec CheckAvailableQueueFamiliesAndTheirProperties(VkPhysicalDevice* physicalDevice)
 {
+	Vec tempQueueFamilies = vec_create(VkQueueFamilyProperties);
 	u32 queueFamiliesCount = 0;
 
-	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamiliesCount, nullptr);
+	vkGetPhysicalDeviceQueueFamilyProperties(*physicalDevice, &queueFamiliesCount, nullptr);
 	if (queueFamiliesCount == 0)
 	{
 		printf("ERROR: Could not get the number of queue families.\n");
-		return false;
+		vec_destroy(tempQueueFamilies);
+		return nullptr;
 	}
 
-	VkQueueFamilyProperties_queue_families = vec_reserve(VkQueueFamilyProperties, queueFamiliesCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamiliesCount, (VkQueueFamilyProperties*)VkQueueFamilyProperties_queue_families);
+	vec_resize(tempQueueFamilies, queueFamiliesCount, VkQueueFamilyProperties);
+	vkGetPhysicalDeviceQueueFamilyProperties(*physicalDevice, &queueFamiliesCount, (VkQueueFamilyProperties*)tempQueueFamilies);
 	if (queueFamiliesCount == 0)
 	{
 		printf("ERROR: Could not get properties of queue families.");
-		return false;
+		vec_destroy(tempQueueFamilies);
+		return nullptr;
 	}
 
-	return true;
+	return tempQueueFamilies;
 }
 
 /* A function to select an index of a queue family with the desired capabilities */
 /* @param The physical device to be screened */
 /* @param The desired capabilities wanted */
 /* @param An unsigned 32 bit integer for the output index */
-bool SelectIndexOfQueueFamilyWithDesiredCapabilities(VkPhysicalDevice physicalDevice, VkQueueFlags desiredCapabilities, u32* queueFamilyIndex)
+bool SelectIndexOfQueueFamilyWithDesiredCapabilities(VkPhysicalDevice* physicalDevice, VkQueueFlags desiredCapabilities, u32* queueFamilyIndex)
 {
-	Vec queueFamilies = nullptr;
-	if(!CheckAvailableQueueFamiliesAndTheirProperties(physicalDevice, queueFamilies))
+	Vec queueFamilies = vec_create(VkQueueFamilyProperties);
+	queueFamilies = CheckAvailableQueueFamiliesAndTheirProperties(physicalDevice);
+	if (queueFamilies == nullptr)
 		return false;
-	for (u32 index = 0; index < (u32)(vec_length(queueFamilies)); ++index)
+
+	for (u32 index = 0; index < vec_length(queueFamilies); ++index)
 	{
 		VkQueueFamilyProperties* indexProperties = (VkQueueFamilyProperties*)vec_get_at(queueFamilies, index);
 		if ((indexProperties->queueCount > 0) &&
 			(indexProperties->queueFlags & desiredCapabilities))
 		{
-			queueFamilyIndex = &index;
+			*queueFamilyIndex = index;
+			vec_destroy(queueFamilies);
 			return true;
 		}
 	}
+
+	vec_destroy(queueFamilies);
 	return false;
 }
 
 /* A structure of data to hold data about a queue */
 typedef struct {
-	u32 FamilyIndex;
-	Vec Float_Priorities;
+	u32 FamilyIndex;		/* The index of the Queue Family*/
+	Vec Float_Priorities;	/* A Vector of floats for the priority of the queue */
 } QueueInfo;
 
 /* A function to create a logical device */
 /* @param The physical device */
 /* @param A Vector of Queue Infos */
-/* @param A Vector of strings (char*) of the desired extensions */
+/* @param A Vector of strings (char*) of the desired extensions, pass in null if you don't need extra extensions */
 /* @param Some VkPhysicalDeviceFeatures for the features of the physical device */
 /* @param The logical device to be filled */
-bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, Vec QueueInfo_queue_infos, Vec Char_desired_extensions, VkPhysicalDeviceFeatures* desired_features, VkDevice* logicalDevice)
+bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_infos, Vec Char_desired_extensions, VkPhysicalDeviceFeatures* desired_features, VkDevice* logicalDevice)
 {
-	Vec VkExtensionProperties_available_extensions = nullptr;
-	if (!CheckAvailableDeviceExtensions(physicalDevice, VkExtensionProperties_available_extensions))
+	Vec VkExtensionProperties_available_extensions = vec_create(VkExtensionProperties);
+	VkExtensionProperties_available_extensions = CheckAvailableDeviceExtensions(physicalDevice);
+	if (VkExtensionProperties_available_extensions == nullptr)
 		return false;
 
-	for (int i = 0; i < vec_length(Char_desired_extensions); ++i)
+	/* Don't go through them if we don't want / need them */
+	if (Char_desired_extensions != nullptr)
 	{
-		char* extension = (char*)vec_get_at(Char_desired_extensions, i);
-		if (!IsExtensionSupported(VkExtensionProperties_available_extensions, extension))
+		/* Old-Fashioned array loop */
+		for (int i = 0; i < vec_length(Char_desired_extensions); ++i)
 		{
-			printf("ERROR: Extension named: \"%s\" is not supported by a physical device\n", extension);
-			return false;
+			char* extension = (char*)vec_get_at(Char_desired_extensions, i);
+			if (!IsExtensionSupported(VkExtensionProperties_available_extensions, extension))
+			{
+				printf("ERROR: Extension named: \"%s\" is not supported by a physical device\n", extension);
+				return false;
+			}
 		}
-		/* NOTE: Should probably free(extension); */
 	}
 
-	Vec VkDeviceQueueCreateInfo_queue_create_info = nullptr;
+	Vec VkDeviceQueueCreateInfo_queue_create_info = vec_create(VkDeviceQueueCreateInfo);;
+	/* Old-Fashioned array loop */
 	for (int i = 0; i < vec_length(QueueInfo_queue_infos); ++i)
 	{
 		QueueInfo* info = (QueueInfo*)vec_get_at(QueueInfo_queue_infos, i);
@@ -245,34 +268,36 @@ bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, Vec QueueInfo_queue_in
 			(const float*)info
 		};
 		vec_pushback(VkDeviceQueueCreateInfo_queue_create_info, newInfo, VkDeviceQueueCreateInfo);
-		/* NOTE: Probably should free(info); here */
 	}
 
-	VkDeviceCreateInfo deviceCreateInfo =
-	{
-		VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		nullptr,
-		0,
-		(u32)(vec_length(VkDeviceQueueCreateInfo_queue_create_info)),
-		vec_length(VkDeviceQueueCreateInfo_queue_create_info) ? vec_get_at(VkDeviceQueueCreateInfo_queue_create_info, 0) : nullptr,
-		0,
-		nullptr,
-		(u32)(vec_length(Char_desired_extensions)),
-		vec_length(Char_desired_extensions) > 0 ? vec_get_at(Char_desired_extensions, 0) : nullptr,
-		desired_features
-	};
+	u32 desiredExtensionsLength = Char_desired_extensions != nullptr ? (u32)(vec_length(Char_desired_extensions)) : 0; /* Again, don't use extensions if we don't want them or we will crash*/
 
-	VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, logicalDevice);
+	VkDeviceCreateInfo deviceCreateInfo;
+	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	deviceCreateInfo.pNext = nullptr;
+	deviceCreateInfo.flags = 0;
+	deviceCreateInfo.queueCreateInfoCount = (u32)(vec_length(VkDeviceQueueCreateInfo_queue_create_info));
+	deviceCreateInfo.pQueueCreateInfos = vec_length(VkDeviceQueueCreateInfo_queue_create_info) ? vec_get_at(VkDeviceQueueCreateInfo_queue_create_info, 0) : nullptr;
+	deviceCreateInfo.enabledLayerCount = 0;
+	deviceCreateInfo.ppEnabledLayerNames = nullptr;
+	deviceCreateInfo.enabledExtensionCount = desiredExtensionsLength;
+	deviceCreateInfo.ppEnabledExtensionNames = desiredExtensionsLength > 0 ? vec_get_at(Char_desired_extensions, 0) : nullptr,
+	deviceCreateInfo.pEnabledFeatures = desired_features;
+	
+
+	VkResult result = vkCreateDevice(*physicalDevice, &deviceCreateInfo, nullptr, logicalDevice);
 	if ((result != VK_SUCCESS) || (logicalDevice == VK_NULL_HANDLE))
 	{
 		printf("ERROR: Could not create logical device.\n");
+		vec_destroy(VkExtensionProperties_available_extensions);
+		vec_destroy(VkDeviceQueueCreateInfo_queue_create_info);
 		return false;
 	}
 
-	return true;
-
 	vec_destroy(VkExtensionProperties_available_extensions);
 	vec_destroy(VkDeviceQueueCreateInfo_queue_create_info);
+
+	return true;
 }
 
 /* A function that prints out available extensions from vulkan that are instance level */
@@ -286,3 +311,214 @@ void PrintAvailableInstanceExtensionsFromVector(Vec extensionsVector)
 		printf("AVAILABLE EXTENSION: NAME: %s, SPECIFICATION VERSION: %d\n", extension->extensionName, (int)extension->specVersion);
 	}
 }
+
+/* A function for obtaining a device queue from a logical device */
+/* @param The logical device to get the queue from */
+/* @param The index of the queue family */
+/* @param The index of the queue */
+/* @param A Pointer to a VkQueue to be output */
+void GetDeviceQueue(VkDevice logicalDevice, u32 queueFamilyIndex, u32 queueIndex, VkQueue* queue)
+{
+	vkGetDeviceQueue(logicalDevice, queueFamilyIndex, queueIndex, queue);
+}
+
+/* A function to create a logical device with geometry shaders and compute queues */
+/* @param The VkInstance to get available devices from and other operations */
+/* @param A Pointer to a VkDevice to be used for many operations including checking for geometry shader support */
+/* @param A Pointer to a graphics queue */
+/* @param A Pointer to a compute queue */
+bool CreateLogicalDeviceWithGeometryShaderAndGraphicsAndComputeQueues(VkInstance* instance, VkDevice* logicalDevice, VkQueue* graphicsQueue, VkQueue* computeQueue)
+{
+	Vec physicalDevices = vec_create(VkPhysicalDevice);
+
+	physicalDevices = EnumerateAvailablePhysicalDevices(instance);
+
+	/* Again, doing the whole loop through vector thing the old-fashioned way because there are no ranged based loops*/
+	for (u32 i = 0; i < vec_length(physicalDevices); ++i)
+	{
+		VkPhysicalDevice* physicalDevice = vec_get_at(physicalDevices, i);
+
+		VkPhysicalDeviceFeatures deviceFeatures;
+		VkPhysicalDeviceProperties deviceProperties;
+		GetFeaturesAndPropertiesOfPhysicalDevice(physicalDevice, &deviceFeatures, &deviceProperties);
+
+		if (!deviceFeatures.geometryShader) {
+			printf("Device \"%s\", does NOT support geometry shaders!\n", deviceProperties.deviceName);
+			continue;
+		}
+		else {
+			memset(&deviceFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
+			deviceFeatures.geometryShader = VK_TRUE;
+		}
+
+		u32 graphicsQueueFamilyIndex;
+		if (!SelectIndexOfQueueFamilyWithDesiredCapabilities(physicalDevice, VK_QUEUE_GRAPHICS_BIT, &graphicsQueueFamilyIndex))
+		{
+			printf("Device \"%s\", does NOT support queue graphics!\n", deviceProperties.deviceName);
+			continue;
+		}
+
+		u32 computeQueueFamilyIndex;
+		if (!SelectIndexOfQueueFamilyWithDesiredCapabilities(physicalDevice, VK_QUEUE_COMPUTE_BIT, &computeQueueFamilyIndex))
+		{
+			printf("Device \"%s\", does NOT support queue compute!\n", deviceProperties.deviceName);
+			continue;
+		}
+
+		Vec requestedQueues = vec_create(QueueInfo);
+		Vec priorities = vec_create(float);
+		vec_pushback(priorities, 1.0f, float);
+		QueueInfo info;
+		info.FamilyIndex = graphicsQueueFamilyIndex;
+		info.Float_Priorities = priorities;
+		if (graphicsQueueFamilyIndex != computeQueueFamilyIndex)
+		{
+			QueueInfo info2;
+			info2.FamilyIndex = computeQueueFamilyIndex;
+			info2.Float_Priorities = priorities;
+			vec_pushback(requestedQueues, info2, QueueInfo);
+		}
+
+		if (!CreateLogicalDevice(physicalDevice, requestedQueues, nullptr, &deviceFeatures, logicalDevice))
+		{
+			printf("Failed to create logical device!\n");
+			continue;
+		}
+		else {
+			GetDeviceQueue(*logicalDevice, graphicsQueueFamilyIndex, 0, graphicsQueue);
+			GetDeviceQueue(*logicalDevice, computeQueueFamilyIndex, 0, computeQueue);
+			vec_destroy(requestedQueues);
+			vec_destroy(physicalDevices);
+			//printf("Chosen device: \"%s\"", deviceProperties.deviceName);
+			return true;
+		}
+		vec_destroy(requestedQueues);
+	}
+
+	vec_destroy(physicalDevices);
+	printf("Could not find a usable device!\n");
+	return false;
+}
+
+/* A function to clean up all of the created vulkan resources */
+/* @param A pointer to the VkInstance to cleanup */
+/* @param A pointer to the VkDevice to cleanup */
+void VulkanCleanup(VkInstance* instance, VkDevice* logicalDevice)
+{
+	if (logicalDevice)
+	{
+		vkDestroyDevice(*logicalDevice, nullptr);
+		logicalDevice = VK_NULL_HANDLE;
+	}
+	if (instance)
+	{
+		vkDestroyInstance(*instance, nullptr);
+		instance = VK_NULL_HANDLE;
+	}
+}
+
+/* A function to create a Vulkan Instance with the required Windows / Linux windowing extensions */
+/* @param A Vector of extra extensions besides the windowing ones, please pass in a VALID vector not nullptr if no extra are required */
+/* @param The application name */
+/* @param The instance to be output to */
+bool CreateVulkanInstanceWithWsiExtensionsEnabled(Vec extraExtensions, const char* applicationName, VkInstance* instance) 
+{
+	const char* platformSurfaceExtensionKHR;
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+	platformSurfaceExtensionKHR = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+#elif defined VK_USE_PLATFORM_XCB_KHR
+	platformSurfaceExtensionKHR = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
+#elif defined VK_USE_PLATFORM_XLIB_KHR
+	platformSurfaceExtensionKHR = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+#endif
+
+	extraExtensions = vec_reserve(const char*, sizeof(VK_KHR_SURFACE_EXTENSION_NAME) + sizeof(platformSurfaceExtensionKHR) + sizeof(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
+	vec_pushback(extraExtensions, VK_KHR_SURFACE_EXTENSION_NAME, const char*);
+	vec_pushback(extraExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME, const char*);
+	vec_pushback(extraExtensions, platformSurfaceExtensionKHR, const char*);
+
+	return CreateVulkanInstance(extraExtensions, applicationName, instance);
+}
+
+/* A function to create a presentation surface to display on */
+/* @param A Pointer to a VkInstance */
+/* @param Some window perameters that are platform-specific */
+/* @param A Pointer to a VkSurfaceKHR to be output to */
+bool CreatePresentationSurface(VkInstance* instance, WindowPerameters perams, VkSurfaceKHR* presentationSurface)
+{
+	VkResult result;
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+	VkWin32SurfaceCreateInfoKHR surfaceCreateInfo;
+	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+	surfaceCreateInfo.pNext = nullptr;
+	surfaceCreateInfo.flags = 0;
+	surfaceCreateInfo.hinstance = perams.HInstance;
+	surfaceCreateInfo.hwnd = perams.HWnd;
+
+	result = vkCreateWin32SurfaceKHR(*instance, &surfaceCreateInfo, nullptr, presentationSurface);
+#elif defined VK_USE_PLATFORM_XLIB_KHR
+
+	VkXlibSurfaceCreateInfoKHR surfaceCreateInfo;
+
+	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,   
+	surfaceCreateInfo.pNext = nullptr,                                          
+	surfaceCreateInfo.flags = 0,                                                
+	surfaceCreateInfo.dpy = perams.Dpy,                           
+	surfaceCreateInfo.window = perams.Window                      
+
+	result = vkCreateXlibSurfaceKHR(instance, &surface_create_info, nullptr, &presentationSurface);
+
+#elif defined VK_USE_PLATFORM_XCB_KHR
+
+VkXcbSurfaceCreateInfoKHR surfaceCreateInfo
+	VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,    // VkStructureType                 sType
+	nullptr,                                          // const void                    * pNext
+	0,                                                // VkXcbSurfaceCreateFlagsKHR      flags
+	perams.Connection,                     // xcb_connection_t              * connection
+	perams.Window                          // xcb_window_t                    window
+
+result = vkCreateXcbSurfaceKHR(instance, &surface_create_info, nullptr, &presentationSurface);
+
+#endif
+
+	if ((result != VK_SUCCESS) || (presentationSurface == VK_NULL_HANDLE)) {
+		printf("ERROR: Could not create presentation surface.\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to select a queue family that supports presentation to a given surface */
+/* @param A Pointer to a physical device such as a GPU to be used for getting properties */
+/* @param A Pointer to a surface that is used to get surface support */
+/* @param A Pointer to a 32 bit unsigned integer number for the output queueFamilyIndex */
+bool SelectQueueFamilyThatSupportsPresentationToGivenSurface(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, u32* queueFamilyIndex)
+{
+	Vec queueFamilies = vec_create(VkQueueFamilyProperties);
+	queueFamilies = CheckAvailableQueueFamiliesAndTheirProperties(physicalDevice);
+	if (queueFamilies == nullptr)
+	{
+		vec_destroy(queueFamilies);
+		return false;
+	}
+
+	for (u32 index = 0; index < (u32)vec_length(queueFamilies); ++index)
+	{
+		VkBool32 presentationSupported = VK_FALSE;
+		VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, index, presentationSurface, &presentationSupported);
+		if ((result == VK_SUCCESS) && (presentationSupported == VK_TRUE))
+		{
+			*queueFamilyIndex = index;
+			return true;
+		}
+	}
+
+	vec_destroy(queueFamilies);
+	return false;
+}
+
+/* A function that selects a desired presentation mode */
+/* @param A Pointer to a physical device */
+/* @param A Pointer to a surface */
