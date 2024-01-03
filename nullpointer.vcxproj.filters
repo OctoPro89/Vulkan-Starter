@@ -37,6 +37,9 @@
     <ClInclude Include="include\VkHelper\VkHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\WindowHelper\WindowHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="vk_layer_settings.txt" />

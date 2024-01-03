@@ -507,7 +507,7 @@ bool SelectQueueFamilyThatSupportsPresentationToGivenSurface(VkPhysicalDevice* p
 	for (u32 index = 0; index < (u32)vec_length(queueFamilies); ++index)
 	{
 		VkBool32 presentationSupported = VK_FALSE;
-		VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, index, presentationSurface, &presentationSupported);
+		VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(*physicalDevice, index, *presentationSurface, &presentationSupported);
 		if ((result == VK_SUCCESS) && (presentationSupported == VK_TRUE))
 		{
 			*queueFamilyIndex = index;
@@ -522,3 +522,179 @@ bool SelectQueueFamilyThatSupportsPresentationToGivenSurface(VkPhysicalDevice* p
 /* A function that selects a desired presentation mode */
 /* @param A Pointer to a physical device */
 /* @param A Pointer to a surface */
+/* @param A VkPresentModeKHR that represents the desired present mode */
+/* @param A Pointer to a present mode to be the output present mode */
+bool SelectDesiredPresentationMode(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkPresentModeKHR desiredPresentMode, VkPresentModeKHR* presentMode)
+{
+	u32 presentModesCount = 0;
+	VkResult result = VK_SUCCESS;
+
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(*physicalDevice, *presentationSurface, &presentModesCount, nullptr);
+	if ((result != VK_SUCCESS) || (presentModesCount == 0))
+	{
+		printf("ERROR: Could not get the number of supported present modes.\n");
+		return false;
+	}
+
+	Vec presentModes = vec_create(VkPresentModeKHR);
+	vec_resize(presentModes, presentModesCount, VkPresentModeKHR);
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(*physicalDevice, *presentationSurface, &presentModesCount, (VkPresentModeKHR*)presentModes);
+	if ((result != VK_SUCCESS) || (presentModesCount == 0))
+	{
+		printf("ERROR: Could not enumerate present modes.\n");
+		return false;
+	}
+
+	/* Old Fashioned array loop */
+	for (u32 i = 0; i < vec_length(presentModes); ++i)
+	{
+		VkPresentModeKHR* crntPresentMode = (VkPresentModeKHR*)vec_get_at(presentModes, i);
+		if (*crntPresentMode == desiredPresentMode)
+		{
+			*presentMode = desiredPresentMode;
+			printf("Found usable present mode!");
+			return true;
+		}
+	}
+
+	printf("WARNING: Desired Present Mode not supported, Falling back on FIFO (V-SYNC) Present Mode!\n");
+	/* Old Fashioned array loop */
+	for (u32 i = 0; i < vec_length(presentModes); ++i)
+	{
+		VkPresentModeKHR* crntPresentMode = (VkPresentModeKHR*)vec_get_at(presentModes, i);
+		if (*crntPresentMode == VK_PRESENT_MODE_FIFO_KHR)
+		{
+			*presentMode = VK_PRESENT_MODE_FIFO_KHR;
+			printf("Using FIFO (V-SYNC) Present Mode!");
+			return true;
+		}
+	}
+
+	printf("ERROR: Could not find available present mode!\n");
+
+	return false;
+}
+
+/* A function to get the capabilities of a presentation surface */
+/* @param A Pointer to a physical device */
+/* @param A Pointer to a VkSurfaceKHR */
+/* @param A Pointer to a VkSurfaceCapabilitiesKHR for output */
+bool GetCapabilitiesOfPresentationSurface(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkSurfaceCapabilitiesKHR* surfaceCapabilities)
+{
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*physicalDevice, *presentationSurface, surfaceCapabilities);
+
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Could not get the capabilities of a presentation surface.\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function for selecting the number of swapchain images */
+/* @param A Pointer to a VkSurfaceCapabilitiesKHR used for screening */
+/* @param A 32 bit unsigned integer for output of the number of swap chain images */
+bool SelectNumberOfSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, u32* numberOfImages)
+{
+	*numberOfImages = surfaceCapabilities->minImageCount + 1;
+	if ((surfaceCapabilities->maxImageCount > 0) && (*numberOfImages > surfaceCapabilities->maxImageCount))
+	{
+		*numberOfImages = surfaceCapabilities->maxImageCount;
+	}
+	return true;
+}
+
+/* A function to choose the appropriate size of images for a swapchain based on surface capabilities */
+/* @param The VkSurfaceCapabilitiesKHR to be screened */
+/* @param The output VkExtent2D */
+bool ChooseSizeofSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, VkExtent2D* sizeOfImages)
+{
+	if (surfaceCapabilities->currentExtent.width = 0xFFFFFFFF) 
+	{
+		sizeOfImages->width = 640;
+		sizeOfImages->height = 480;
+
+		if (sizeOfImages->width < surfaceCapabilities->minImageExtent.width) {
+			sizeOfImages->width = surfaceCapabilities->minImageExtent.width;
+		}
+		else if (sizeOfImages->width > surfaceCapabilities->maxImageExtent.width) {
+			sizeOfImages->width = surfaceCapabilities->maxImageExtent.width;
+		}
+
+		if (sizeOfImages->height < surfaceCapabilities->minImageExtent.height) {
+			sizeOfImages->height = surfaceCapabilities->minImageExtent.height;
+		}
+		else if (sizeOfImages->height > surfaceCapabilities->maxImageExtent.height) {
+			sizeOfImages->height = surfaceCapabilities->maxImageExtent.height;
+		}
+	}
+	else {
+		*sizeOfImages = surfaceCapabilities->currentExtent;
+	}
+	return true;
+}
+
+/* A function for selecting desired usage of swapchain produced images */
+/* @peram A Pointer to a VkSurfaceCapabilitiesKHR */
+/* @peram A VkImageUsageFlags for the desired usage */
+/* @peram A Pointer ti a VkImageUsageflags for output */
+bool SelectDesiredUsageScenariosOfSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, VkImageUsageFlags desiredUsages, VkImageUsageFlags* imageUsages)
+{
+	*imageUsages = desiredUsages & surfaceCapabilities->supportedUsageFlags;
+	return desiredUsages == *imageUsages;
+}
+
+/* A function for selection the transformation of swapchain images (useful for mobile / vertical mode) */
+/* A VkSurfaceTransformFlagBitsKHR for the desired transform */
+/* A VkSurfaceTransformFlagBitsKHR for the output transform */
+bool SelectTransformationOfSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, VkSurfaceTransformFlagBitsKHR desiredTransform, VkSurfaceTransformFlagBitsKHR* surfaceTransform)
+{
+	if (surfaceCapabilities->supportedTransforms & desiredTransform)
+	{
+		*surfaceTransform = desiredTransform;
+	}
+	else {
+		*surfaceTransform = surfaceCapabilities->currentTransform;
+	}
+	return true;
+}
+
+/* A function for selecting the format of swapchain images */
+/* @param A Pointer to a physical device */
+/* @param A Pointer to a surface for the presentation surface */
+/* @param A Pointer to a surface format khr for the desired format */
+/* @param A Pointer to a format to be output to */
+/* @param A Pointer to a color space khr */
+bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkSurfaceFormatKHR* desiredSurfaceFormat, VkFormat* imageFormat, VkColorSpaceKHR* imageColorSpace)
+{
+	/* Enumerate supported format */
+	u32 formatsCount = 0;
+	VkResult result = VK_SUCCESS;
+
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(*physicalDevice, *presentationSurface, &formatsCount, nullptr);
+	if ((VK_SUCCESS != result) || (formatsCount == 0))
+	{
+		printf("Could not get the number of supported surfac formats.\n");
+		return false;
+	}
+
+	Vec surfaceFormats = vec_create(VkSurfaceFormatKHR);
+	vec_resize(surfaceFormats, formatsCount, VkSurfaceFormatKHR);
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(*physicalDevice, *presentationSurface, &formatsCount, surfaceFormats);
+	if ((VK_SUCCESS != result) || (formatsCount == 0))
+	{
+		printf("Could not enumerate supported surface formats.\n");
+		vec_destroy(surfaceFormats);
+		return false;
+	}
+
+	VkSurfaceFormatKHR* first = vec_get_at(surfaceFormats, 0);
+
+	if ((vec_length(surfaceFormats) == 0) || (first->format == VK_FORMAT_UNDEFINED))
+	{
+		*imageFormat = desiredSurfaceFormat->format;
+	}
+
+	return true;
+}
