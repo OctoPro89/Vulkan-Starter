@@ -779,3 +779,28 @@ bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface,
 
 	return true;
 }
+
+Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
+{
+	Vec tempVec = vec_create(VkImage);
+
+	u32 imageCount = 0;
+	VkResult result = VK_SUCCESS;
+	
+	result = vkGetSwapchainImagesKHR(*logicalDevice, *swapchain, &imageCount, nullptr);
+	if ((result != VK_SUCCESS) || (imageCount == 0))
+	{
+		printf("ERROR: Could not get the number of swapchain images!\n");
+		return false;
+	}
+
+	vec_resize(tempVec, imageCount, VkImage);
+	result = vkGetSwapchainImagesKHR(*logicalDevice, *swapchain, &imageCount, (VkImage*)tempVec);
+	if ((result != VK_SUCCESS) || (imageCount == 0))
+	{
+		printf("ERROR: Could not enumerate swapchain images!\n");
+		return false;
+	}
+
+	return true;
+}
