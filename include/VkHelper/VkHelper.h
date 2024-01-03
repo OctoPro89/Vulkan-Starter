@@ -740,6 +740,17 @@ void VulkanSurfaceCleanup(VkInstance* instance, VkSurfaceKHR* surface)
 	}
 }
 
+/* A function to create a swapchain */
+/* @param A Pointer to a logical device */
+/* @param A Pointer to a presentation surface */
+/* @param A Pointer to a 32 bit unsigned integer for output */
+/* @param A Pointer to a surface format */
+/* @param A Pointer to the image size */
+/* @param A Pointer to the image usage flags */
+/* @param A Pointer to the surface transform */
+/* @param A Pointer to a present mode */
+/* @param A Pointer to the old swapchain (null if none) */
+/* @param A Pointer to a new swapchain for output */
 bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface, u32* imageCount, VkSurfaceFormatKHR* surfaceFormat, VkExtent2D* imageSize,
 	VkImageUsageFlags* imageUsage, VkSurfaceTransformFlagBitsKHR* surfaceTransform, VkPresentModeKHR* presentMode, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain)
 {
@@ -780,6 +791,9 @@ bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface,
 	return true;
 }
 
+/* A function for getting a vector of swapchain images */
+/* @param A Pointer to a logical device */
+/* @param A Pointer to the swapchain */
 Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 {
 	Vec tempVec = vec_create(VkImage);
