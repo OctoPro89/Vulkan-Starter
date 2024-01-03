@@ -400,23 +400,6 @@ bool CreateLogicalDeviceWithGeometryShaderAndGraphicsAndComputeQueues(VkInstance
 	return false;
 }
 
-/* A function to clean up all of the created vulkan resources */
-/* @param A pointer to the VkInstance to cleanup */
-/* @param A pointer to the VkDevice to cleanup */
-void VulkanCleanup(VkInstance* instance, VkDevice* logicalDevice)
-{
-	if (logicalDevice)
-	{
-		vkDestroyDevice(*logicalDevice, nullptr);
-		logicalDevice = VK_NULL_HANDLE;
-	}
-	if (instance)
-	{
-		vkDestroyInstance(*instance, nullptr);
-		instance = VK_NULL_HANDLE;
-	}
-}
-
 /* A function to create a Vulkan Instance with the required Windows / Linux windowing extensions */
 /* @param A Vector of extra extensions besides the windowing ones, please pass in a VALID vector not nullptr if no extra are required */
 /* @param The application name */
@@ -691,9 +674,107 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 
 	VkSurfaceFormatKHR* first = vec_get_at(surfaceFormats, 0);
 
-	if ((vec_length(surfaceFormats) == 0) || (first->format == VK_FORMAT_UNDEFINED))
+	if ((vec_length(surfaceFormats) == 1) && (first->format == VK_FORMAT_UNDEFINED))
 	{
 		*imageFormat = desiredSurfaceFormat->format;
+		*imageColorSpace = desiredSurfaceFormat->colorSpace;
+		return true;
+	}
+
+	/* Old fashioned vector / array loop */
+	for (u32 i = 0; i < vec_length(surfaceFormats); ++i)
+	{
+		VkSurfaceFormatKHR* surfaceFormat = (VkSurfaceFormatKHR*)vec_get_at(surfaceFormats, i);
+		if ((surfaceFormat->format == desiredSurfaceFormat->format) && (surfaceFormat->colorSpace == desiredSurfaceFormat->colorSpace))
+		{
+			*imageFormat = desiredSurfaceFormat->format;
+			*imageColorSpace = desiredSurfaceFormat->colorSpace;
+			return true;
+		} 
+		else if (surfaceFormat->format == desiredSurfaceFormat->format)
+		{
+			*imageFormat = desiredSurfaceFormat->format;
+			*imageColorSpace = surfaceFormat->colorSpace;
+			printf("WARNING: Desired combination of format and color space not supported! Falling back on other colorspace.\n");
+			return true;
+		}
+	}
+
+	*imageFormat = first->format;
+	*imageColorSpace = first->colorSpace;
+	printf("WARNING: Desired format is not supported. Selecting available format and colorspace combination!\n");
+
+	return true;
+}
+
+/* A function to clean up created vulkan resources */
+/* @param A pointer to the resource to cleanup */
+void VulkanInstanceCleanup(VkInstance* instance)
+{
+	if (instance != VK_NULL_HANDLE)
+	{
+		vkDestroyInstance(*instance, nullptr);
+		instance = VK_NULL_HANDLE;
+	}
+}
+
+/* A function to clean up created vulkan resources */
+/* @param A pointer to the resource to cleanup */
+void VulkanDeviceCleanup(VkDevice* logicalDevice)
+{
+	if (logicalDevice != VK_NULL_HANDLE)
+	{
+		vkDestroyDevice(*logicalDevice, nullptr);
+		logicalDevice = VK_NULL_HANDLE;
+	}
+}
+
+/* A function to clean up created vulkan resources */
+/* @param A pointer to the resource to cleanup */
+void VulkanSurfaceCleanup(VkInstance* instance, VkSurfaceKHR* surface)
+{
+	if (surface != VK_NULL_HANDLE)
+	{
+		vkDestroySurfaceKHR(*instance, *surface, nullptr);
+		surface = VK_NULL_HANDLE;
+	}
+}
+
+bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface, u32* imageCount, VkSurfaceFormatKHR* surfaceFormat, VkExtent2D* imageSize,
+	VkImageUsageFlags* imageUsage, VkSurfaceTransformFlagBitsKHR* surfaceTransform, VkPresentModeKHR* presentMode, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain)
+{
+	VkSwapchainCreateInfoKHR swapchainCreateInfo = {
+		VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+		nullptr,                                    
+		0,                                          
+		presentationSurface,                        
+		imageCount,                                 
+		surfaceFormat->format,                      
+		surfaceFormat->colorSpace,                  
+		imageSize,                                  
+		1,                                          
+		imageUsage,                                 
+		VK_SHARING_MODE_EXCLUSIVE,                  
+		0,                                          
+		nullptr,                                    
+		surfaceTransform,                           
+		VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,          
+		presentMode,                                
+		VK_TRUE,                                    
+		oldSwapchain                                
+	};
+
+	VkResult result;
+	result = vkCreateSwapchainKHR(*logicalDevice, &swapchainCreateInfo, nullptr, swapchain);
+	if ((result != VK_SUCCESS) || (swapchain == VK_NULL_HANDLE))
+	{
+		printf("ERROR: Could not create swapchain!\n");
+		return false;
+	}
+
+	if (oldSwapchain != VK_NULL_HANDLE)
+	{
+		vkDestroySwapchainKHR(*logicalDevice, *oldSwapchain, nullptr);
 	}
 
 	return true;

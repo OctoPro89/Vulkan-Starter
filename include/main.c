@@ -26,7 +26,8 @@ bool Start()
 	vec_destroy(availableExtensions);
 	vec_destroy(desiredExtensions);
 
-	VulkanCleanup(&Inst, &logicalDevice);
+	VulkanInstanceCleanup(&Inst);
+	VulkanDeviceCleanup(&logicalDevice);
 
 	return true;
 }
