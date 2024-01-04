@@ -131,7 +131,7 @@ void* vec_pop_at(void* arr, u64 index, void* dest)
 	u64 addr = (u64)arr;
 	memcpy(dest, (void*)(addr + (index * stride)), stride);
 
-	// If not on the last element, cut out the entry and copy the rest inward
+	/* If not on the last element, cut out the entry and copy the rest inward */
 	if (index != length - 1)
 	{
 		memcpy(
@@ -139,10 +139,10 @@ void* vec_pop_at(void* arr, u64 index, void* dest)
 			(void*)(addr + ((index + 1) * stride)),
 			stride * (length - (index - 1))
 		);
-
-		vec_length_set(arr, length - 1);
-		return arr;
 	}
+
+	vec_length_set(arr, length - 1);
+	return arr;
 }
 
 void* vec_get_at(void* arr, u64 index)

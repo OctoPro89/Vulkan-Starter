@@ -73,8 +73,11 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 		}
 	}
 
+	u32 desiredExtensionsLength = ConstCharPointer_desired_extensions != nullptr ? (u32)(vec_length(ConstCharPointer_desired_extensions)) : 0; /* Again, don't use extensions if we don't want them or we will crash */
+
 	// Create Vulkan instance
-	VkApplicationInfo appInfo = { 0 };
+	VkApplicationInfo appInfo;
+	memset(&appInfo, 0, sizeof(VkApplicationInfo));
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	appInfo.pApplicationName = "nullpointer";
 	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -82,9 +85,12 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_0;
 
-	VkInstanceCreateInfo createInfo = { 0 };
+	VkInstanceCreateInfo createInfo;
+	memset(&createInfo, 0, sizeof(VkInstanceCreateInfo));
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfo;
+	createInfo.enabledExtensionCount = desiredExtensionsLength;
+	createInfo.ppEnabledExtensionNames = (const char *const*)ConstCharPointer_desired_extensions;
 	if (vkCreateInstance(&createInfo, nullptr, Inst) != VK_SUCCESS) {
 		// Handle instance creation failure
 		printf("ERROR: Could not create Vulkan instance");
@@ -143,7 +149,7 @@ Vec CheckAvailableDeviceExtensions(VkPhysicalDevice* physical_device)
 	}
 
 	vec_resize(tempVecExtensionProperties, extensions_count, VkExtensionProperties);
-	result = vkEnumerateDeviceExtensionProperties(*physical_device, nullptr, &extensions_count, vec_get_at(tempVecExtensionProperties, 0));
+	result = vkEnumerateDeviceExtensionProperties(*physical_device, nullptr, &extensions_count, (VkExtensionProperties*)vec_get_at(tempVecExtensionProperties, 0));
 	if ((result != VK_SUCCESS) || (extensions_count == 0))
 	{
 		printf("ERROR: Could not enumerate device extensions.\n");
@@ -225,13 +231,26 @@ typedef struct {
 	Vec Float_Priorities;	/* A Vector of floats for the priority of the queue */
 } QueueInfo;
 
+/* A function that prints out available extensions from vulkan that are instance level */
+/* @param the vector containing the extension data */
+void PrintAvailableExtensionsFromVector(Vec extensionsVector)
+{
+	u32 temp = (u32)vec_length(extensionsVector);
+	for (u32 i = 0; i < vec_length(extensionsVector); ++i)
+	{
+		VkExtensionProperties* extension = vec_get_at(extensionsVector, i);
+		printf("AVAILABLE EXTENSION: NAME: %s, SPECIFICATION VERSION: %d\n", extension->extensionName, (int)extension->specVersion);
+	}
+}
+
+
 /* A function to create a logical device */
 /* @param The physical device */
 /* @param A Vector of Queue Infos */
-/* @param A Vector of strings (char*) of the desired extensions, pass in null if you don't need extra extensions */
+/* @param A Vector of strings (const char*) of the desired extensions, pass in null if you don't need extra extensions */
 /* @param Some VkPhysicalDeviceFeatures for the features of the physical device */
 /* @param The logical device to be filled */
-bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_infos, Vec Char_desired_extensions, VkPhysicalDeviceFeatures* desired_features, VkDevice* logicalDevice)
+bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_infos, Vec ConstCharPointer_desired_extensions, VkPhysicalDeviceFeatures* desired_features, VkDevice* logicalDevice)
 {
 	Vec VkExtensionProperties_available_extensions = vec_create(VkExtensionProperties);
 	VkExtensionProperties_available_extensions = CheckAvailableDeviceExtensions(physicalDevice);
@@ -239,15 +258,15 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 		return false;
 
 	/* Don't go through them if we don't want / need them */
-	if (Char_desired_extensions != nullptr)
+	if (ConstCharPointer_desired_extensions != nullptr)
 	{
 		/* Old-Fashioned array loop */
-		for (int i = 0; i < vec_length(Char_desired_extensions); ++i)
+		for (int i = 0; i < vec_length(ConstCharPointer_desired_extensions); ++i)
 		{
-			char* extension = (char*)vec_get_at(Char_desired_extensions, i);
-			if (!IsExtensionSupported(VkExtensionProperties_available_extensions, extension))
+			const char** extension = (const char**)vec_get_at(ConstCharPointer_desired_extensions, i);
+			if (!IsExtensionSupported(VkExtensionProperties_available_extensions, *extension))
 			{
-				printf("ERROR: Extension named: \"%s\" is not supported by a physical device\n", extension);
+				printf("ERROR: Extension named: \"%s\" is not supported by a physical device\n", *extension);
 				return false;
 			}
 		}
@@ -270,7 +289,7 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 		vec_pushback(VkDeviceQueueCreateInfo_queue_create_info, newInfo, VkDeviceQueueCreateInfo);
 	}
 
-	u32 desiredExtensionsLength = Char_desired_extensions != nullptr ? (u32)(vec_length(Char_desired_extensions)) : 0; /* Again, don't use extensions if we don't want them or we will crash*/
+	u32 desiredExtensionsLength = ConstCharPointer_desired_extensions != nullptr ? (u32)(vec_length(ConstCharPointer_desired_extensions)) : 0; /* Again, don't use extensions if we don't want them or we will crash */
 
 	VkDeviceCreateInfo deviceCreateInfo;
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -281,7 +300,7 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 	deviceCreateInfo.enabledLayerCount = 0;
 	deviceCreateInfo.ppEnabledLayerNames = nullptr;
 	deviceCreateInfo.enabledExtensionCount = desiredExtensionsLength;
-	deviceCreateInfo.ppEnabledExtensionNames = desiredExtensionsLength > 0 ? vec_get_at(Char_desired_extensions, 0) : nullptr,
+	deviceCreateInfo.ppEnabledExtensionNames = desiredExtensionsLength > 0 ? vec_get_at(ConstCharPointer_desired_extensions, 0) : nullptr,
 	deviceCreateInfo.pEnabledFeatures = desired_features;
 	
 
@@ -294,22 +313,11 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 		return false;
 	}
 
+	PrintAvailableExtensionsFromVector(VkExtensionProperties_available_extensions);
 	vec_destroy(VkExtensionProperties_available_extensions);
 	vec_destroy(VkDeviceQueueCreateInfo_queue_create_info);
 
 	return true;
-}
-
-/* A function that prints out available extensions from vulkan that are instance level */
-/* @param the vector containing the extension data */
-void PrintAvailableInstanceExtensionsFromVector(Vec extensionsVector)
-{
-	u32 temp = (u32)vec_length(extensionsVector);
-	for (u32 i = 0; i < vec_length(extensionsVector); ++i)
-	{
-		VkExtensionProperties* extension = vec_get_at(extensionsVector, i);
-		printf("AVAILABLE EXTENSION: NAME: %s, SPECIFICATION VERSION: %d\n", extension->extensionName, (int)extension->specVersion);
-	}
 }
 
 /* A function for obtaining a device queue from a logical device */
@@ -336,7 +344,7 @@ bool CreateLogicalDeviceWithGeometryShaderAndGraphicsAndComputeQueues(VkInstance
 	/* Again, doing the whole loop through vector thing the old-fashioned way because there are no ranged based loops*/
 	for (u32 i = 0; i < vec_length(physicalDevices); ++i)
 	{
-		VkPhysicalDevice* physicalDevice = vec_get_at(physicalDevices, i);
+		VkPhysicalDevice* physicalDevice = (VkPhysicalDevice*)vec_get_at(physicalDevices, i);
 
 		VkPhysicalDeviceFeatures deviceFeatures;
 		VkPhysicalDeviceProperties deviceProperties;
@@ -389,7 +397,7 @@ bool CreateLogicalDeviceWithGeometryShaderAndGraphicsAndComputeQueues(VkInstance
 			GetDeviceQueue(*logicalDevice, computeQueueFamilyIndex, 0, computeQueue);
 			vec_destroy(requestedQueues);
 			vec_destroy(physicalDevices);
-			//printf("Chosen device: \"%s\"", deviceProperties.deviceName);
+			printf("Chosen device: \"%s\"", deviceProperties.deviceName);
 			return true;
 		}
 		vec_destroy(requestedQueues);
@@ -417,17 +425,29 @@ bool CreateVulkanInstanceWithWsiExtensionsEnabled(Vec extraExtensions, const cha
 
 	extraExtensions = vec_reserve(const char*, sizeof(VK_KHR_SURFACE_EXTENSION_NAME) + sizeof(platformSurfaceExtensionKHR) + sizeof(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
 	vec_pushback(extraExtensions, VK_KHR_SURFACE_EXTENSION_NAME, const char*);
-	vec_pushback(extraExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME, const char*);
 	vec_pushback(extraExtensions, platformSurfaceExtensionKHR, const char*);
 
 	return CreateVulkanInstance(extraExtensions, applicationName, instance);
+}
+
+/* A function to create a Vulkan Logical Device with the required Windows / Linux windowing extensions */
+/* @param The physical device to create the logical one with */
+/* @param A Vector of queue infos */
+/* @param A Vector of extra extensions besides the default ones, please pass in a VALID vector not nullptr if no extra are required */
+/* @param The desired features name */
+/* @param The device to be output to */
+bool CreateLogicalDeviceWithWsiExtensionsEnabled(VkPhysicalDevice* physicalDevice, Vec queueInfos, Vec desiredExtensions, VkPhysicalDeviceFeatures* desiredFeatures, VkDevice* logicalDevice) 
+{
+	desiredExtensions = vec_reserve(const char*, sizeof(desiredExtensions) + sizeof(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
+	vec_pushback(desiredExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME, const char*);
+	return CreateLogicalDevice(physicalDevice, queueInfos, desiredExtensions, desiredFeatures, logicalDevice);
 }
 
 /* A function to create a presentation surface to display on */
 /* @param A Pointer to a VkInstance */
 /* @param Some window perameters that are platform-specific */
 /* @param A Pointer to a VkSurfaceKHR to be output to */
-bool CreatePresentationSurface(VkInstance* instance, WindowPerameters perams, VkSurfaceKHR* presentationSurface)
+bool CreatePresentationSurface(VkInstance* instance, WindowPerameters params, VkSurfaceKHR* presentationSurface)
 {
 	VkResult result;
 
@@ -436,8 +456,8 @@ bool CreatePresentationSurface(VkInstance* instance, WindowPerameters perams, Vk
 	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 	surfaceCreateInfo.pNext = nullptr;
 	surfaceCreateInfo.flags = 0;
-	surfaceCreateInfo.hinstance = perams.HInstance;
-	surfaceCreateInfo.hwnd = perams.HWnd;
+	surfaceCreateInfo.hinstance = params.HInstance;
+	surfaceCreateInfo.hwnd = params.HWnd;
 
 	result = vkCreateWin32SurfaceKHR(*instance, &surfaceCreateInfo, nullptr, presentationSurface);
 #elif defined VK_USE_PLATFORM_XLIB_KHR
@@ -450,18 +470,18 @@ bool CreatePresentationSurface(VkInstance* instance, WindowPerameters perams, Vk
 	surfaceCreateInfo.dpy = perams.Dpy,                           
 	surfaceCreateInfo.window = perams.Window                      
 
-	result = vkCreateXlibSurfaceKHR(instance, &surface_create_info, nullptr, &presentationSurface);
+	result = vkCreateXlibSurfaceKHR(*instance, &surface_create_info, nullptr, &presentationSurface);
 
 #elif defined VK_USE_PLATFORM_XCB_KHR
 
 VkXcbSurfaceCreateInfoKHR surfaceCreateInfo
-	VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,    // VkStructureType                 sType
-	nullptr,                                          // const void                    * pNext
-	0,                                                // VkXcbSurfaceCreateFlagsKHR      flags
-	perams.Connection,                     // xcb_connection_t              * connection
-	perams.Window                          // xcb_window_t                    window
+	VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,    
+	nullptr,                               
+	0,                                     
+	perams.Connection,                     
+	perams.Window                          
 
-result = vkCreateXcbSurfaceKHR(instance, &surface_create_info, nullptr, &presentationSurface);
+result = vkCreateXcbSurfaceKHR(*instance, &surface_create_info, nullptr, &presentationSurface);
 
 #endif
 
@@ -619,9 +639,9 @@ bool ChooseSizeofSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, 
 }
 
 /* A function for selecting desired usage of swapchain produced images */
-/* @peram A Pointer to a VkSurfaceCapabilitiesKHR */
-/* @peram A VkImageUsageFlags for the desired usage */
-/* @peram A Pointer ti a VkImageUsageflags for output */
+/* @param A Pointer to a VkSurfaceCapabilitiesKHR */
+/* @param A VkImageUsageFlags for the desired usage */
+/* @param A Pointer to a VkImageUsageflags for output */
 bool SelectDesiredUsageScenariosOfSwapchainImages(VkSurfaceCapabilitiesKHR* surfaceCapabilities, VkImageUsageFlags desiredUsages, VkImageUsageFlags* imageUsages)
 {
 	*imageUsages = desiredUsages & surfaceCapabilities->supportedUsageFlags;
@@ -678,6 +698,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 	{
 		*imageFormat = desiredSurfaceFormat->format;
 		*imageColorSpace = desiredSurfaceFormat->colorSpace;
+		vec_destroy(surfaceFormats);
 		return true;
 	}
 
@@ -689,6 +710,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		{
 			*imageFormat = desiredSurfaceFormat->format;
 			*imageColorSpace = desiredSurfaceFormat->colorSpace;
+			vec_destroy(surfaceFormats);
 			return true;
 		} 
 		else if (surfaceFormat->format == desiredSurfaceFormat->format)
@@ -696,6 +718,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 			*imageFormat = desiredSurfaceFormat->format;
 			*imageColorSpace = surfaceFormat->colorSpace;
 			printf("WARNING: Desired combination of format and color space not supported! Falling back on other colorspace.\n");
+			vec_destroy(surfaceFormats);
 			return true;
 		}
 	}
@@ -703,7 +726,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 	*imageFormat = first->format;
 	*imageColorSpace = first->colorSpace;
 	printf("WARNING: Desired format is not supported. Selecting available format and colorspace combination!\n");
-
+	vec_destroy(surfaceFormats);
 	return true;
 }
 
@@ -740,6 +763,13 @@ void VulkanSurfaceCleanup(VkInstance* instance, VkSurfaceKHR* surface)
 	}
 }
 
+/* A function to clean up created vulkan resources */
+/* @param A pointer to the resource to cleanup */
+void VulkanSwapchainCleanup()
+{
+
+}
+
 /* A function to create a swapchain */
 /* @param A Pointer to a logical device */
 /* @param A Pointer to a presentation surface */
@@ -754,26 +784,26 @@ void VulkanSurfaceCleanup(VkInstance* instance, VkSurfaceKHR* surface)
 bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface, u32* imageCount, VkSurfaceFormatKHR* surfaceFormat, VkExtent2D* imageSize,
 	VkImageUsageFlags* imageUsage, VkSurfaceTransformFlagBitsKHR* surfaceTransform, VkPresentModeKHR* presentMode, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain)
 {
-	VkSwapchainCreateInfoKHR swapchainCreateInfo = {
-		VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		nullptr,                                    
-		0,                                          
-		presentationSurface,                        
-		imageCount,                                 
-		surfaceFormat->format,                      
-		surfaceFormat->colorSpace,                  
-		imageSize,                                  
-		1,                                          
-		imageUsage,                                 
-		VK_SHARING_MODE_EXCLUSIVE,                  
-		0,                                          
-		nullptr,                                    
-		surfaceTransform,                           
-		VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,          
-		presentMode,                                
-		VK_TRUE,                                    
-		oldSwapchain                                
-	};
+	VkSwapchainCreateInfoKHR swapchainCreateInfo;
+	swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapchainCreateInfo.pNext = nullptr;
+	swapchainCreateInfo.flags = 0;
+	swapchainCreateInfo.surface = *presentationSurface;
+	swapchainCreateInfo.minImageCount = *imageCount;
+	swapchainCreateInfo.imageFormat = surfaceFormat->format;
+	swapchainCreateInfo.imageColorSpace = surfaceFormat->colorSpace;
+	swapchainCreateInfo.imageExtent = *imageSize;
+	swapchainCreateInfo.imageArrayLayers = 1;
+	swapchainCreateInfo.imageUsage = *imageUsage;
+	swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	swapchainCreateInfo.queueFamilyIndexCount = 0;
+	swapchainCreateInfo.pQueueFamilyIndices = nullptr;
+	swapchainCreateInfo.preTransform = *surfaceTransform;
+	swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	swapchainCreateInfo.presentMode = *presentMode;
+	swapchainCreateInfo.clipped = VK_TRUE;
+	swapchainCreateInfo.oldSwapchain = *oldSwapchain;
+	
 
 	VkResult result;
 	result = vkCreateSwapchainKHR(*logicalDevice, &swapchainCreateInfo, nullptr, swapchain);
@@ -805,7 +835,7 @@ Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 	if ((result != VK_SUCCESS) || (imageCount == 0))
 	{
 		printf("ERROR: Could not get the number of swapchain images!\n");
-		return false;
+		return nullptr;
 	}
 
 	vec_resize(tempVec, imageCount, VkImage);
@@ -813,8 +843,88 @@ Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 	if ((result != VK_SUCCESS) || (imageCount == 0))
 	{
 		printf("ERROR: Could not enumerate swapchain images!\n");
+		return nullptr;
+	}
+
+	return tempVec;
+}
+
+/* A function for creating a swapchain with R8G8B8A8 format and a mailbox present mode */
+/* @param A Pointer to a physical device */
+/* @param A Pointer to a presentation surface */
+/* @param A Pointer to a logical device */
+/* @param A Pointer to the usage flags */
+/* @param A Pointer to the image size */
+/* @param A Pointer to the image format */
+/* @param A Pointer to the old swapchain (null if none) */
+/* @param A Pointer to a new swapchain for output */
+bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkDevice* logicalDevice, VkImageUsageFlags* swapchainImageUsage,
+	VkExtent2D* imageSize, VkFormat* imageFormat, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain, Vec swapchainImages)
+{
+	VkPresentModeKHR* desiredPresentMode = nullptr;
+	if (!SelectDesiredPresentationMode(physicalDevice, presentationSurface, VK_PRESENT_MODE_MAILBOX_KHR, desiredPresentMode))
+	{
+		printf("ERROR: Could not use mailbox presentation mode!\n");
 		return false;
 	}
 
+	VkSurfaceCapabilitiesKHR* surfaceCapabilities = nullptr;
+	if (!GetCapabilitiesOfPresentationSurface(physicalDevice, presentationSurface, surfaceCapabilities))
+	{
+		printf("ERROR: Could not get capabilities of presentation surface!\n");
+		return false;
+	}
+
+	u32* numberOfImages = 0;
+	if (!SelectNumberOfSwapchainImages(surfaceCapabilities, numberOfImages))
+	{
+		printf("ERROR: Could not select number of swapchain images!\n");
+		return false;
+	}
+
+	if (!ChooseSizeofSwapchainImages(surfaceCapabilities, imageSize))
+	{
+		printf("ERROR: Could not choose size of swapchain images!\n");
+		return false;
+	}
+
+	VkImageUsageFlags* imageUsage = nullptr;
+	if (!SelectDesiredUsageScenariosOfSwapchainImages(surfaceCapabilities, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, imageUsage))
+	{
+		printf("ERROR: Could not select desired usage scenarios of swapchain images!\n");
+		return false;
+	}
+
+	VkSurfaceTransformFlagBitsKHR* surfaceTransform = nullptr;
+	SelectTransformationOfSwapchainImages(surfaceCapabilities, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, surfaceTransform);
+	
+	VkColorSpaceKHR* imageColorSpace = nullptr;
+	VkSurfaceFormatKHR desiredFormat[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+	if (!SelectFormatOfSwapchainImages(physicalDevice, presentationSurface, &desiredFormat[0], imageFormat, imageColorSpace))
+	{
+		printf("ERROR: Could not select format of swapchain images!\n");
+		return false;
+	}
+
+	VkSurfaceFormatKHR* formatToUse = (VkSurfaceFormatKHR*)malloc(sizeof(VkSurfaceFormatKHR));
+
+	if (!CreateSwapchain(logicalDevice, presentationSurface, numberOfImages, formatToUse, imageSize, imageUsage, surfaceTransform, desiredPresentMode, oldSwapchain, swapchain))
+	{
+		printf("ERROR: Could not create swapchain!\n");
+		free(formatToUse);
+		return false;
+	}
+
+	swapchainImages = GetSwapchainImageHandles(logicalDevice, swapchain);
+
+	if (swapchainImages == nullptr)
+	{
+		printf("ERROR: Could not get swapchain image handles!\n");
+		free(formatToUse);
+		return false;
+	}
+
+	printf("INFO: Created Swapchain successfully!\n");
+	free(formatToUse);
 	return true;
 }
