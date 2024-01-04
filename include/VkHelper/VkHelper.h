@@ -85,12 +85,16 @@ bool CreateVulkanInstance(Vec ConstCharPointer_desired_extensions, const char* a
 	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_0;
 
+	const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
+
 	VkInstanceCreateInfo createInfo;
 	memset(&createInfo, 0, sizeof(VkInstanceCreateInfo));
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfo;
 	createInfo.enabledExtensionCount = desiredExtensionsLength;
 	createInfo.ppEnabledExtensionNames = (const char *const*)ConstCharPointer_desired_extensions;
+	createInfo.enabledLayerCount = 1;
+	createInfo.ppEnabledLayerNames = layers;
 	if (vkCreateInstance(&createInfo, nullptr, Inst) != VK_SUCCESS) {
 		// Handle instance creation failure
 		printf("ERROR: Could not create Vulkan instance");
@@ -555,7 +559,7 @@ bool SelectDesiredPresentationMode(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		if (*crntPresentMode == desiredPresentMode)
 		{
 			*presentMode = desiredPresentMode;
-			printf("Found usable present mode!");
+			printf("Found usable present mode!\n");
 			return true;
 		}
 	}
@@ -568,7 +572,7 @@ bool SelectDesiredPresentationMode(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		if (*crntPresentMode == VK_PRESENT_MODE_FIFO_KHR)
 		{
 			*presentMode = VK_PRESENT_MODE_FIFO_KHR;
-			printf("Using FIFO (V-SYNC) Present Mode!");
+			printf("Using FIFO (V-SYNC) Present Mode!\n");
 			return true;
 		}
 	}
@@ -802,7 +806,7 @@ bool CreateSwapchain(VkDevice* logicalDevice, VkSurfaceKHR* presentationSurface,
 	swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	swapchainCreateInfo.presentMode = *presentMode;
 	swapchainCreateInfo.clipped = VK_TRUE;
-	swapchainCreateInfo.oldSwapchain = *oldSwapchain;
+	swapchainCreateInfo.oldSwapchain = oldSwapchain != nullptr ? *oldSwapchain : nullptr;
 	
 
 	VkResult result;
@@ -858,60 +862,57 @@ Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 /* @param A Pointer to the image format */
 /* @param A Pointer to the old swapchain (null if none) */
 /* @param A Pointer to a new swapchain for output */
-bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkDevice* logicalDevice, VkImageUsageFlags* swapchainImageUsage,
+bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkDevice* logicalDevice, VkImageUsageFlags swapchainImageUsage,
 	VkExtent2D* imageSize, VkFormat* imageFormat, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain, Vec swapchainImages)
 {
-	VkPresentModeKHR* desiredPresentMode = nullptr;
-	if (!SelectDesiredPresentationMode(physicalDevice, presentationSurface, VK_PRESENT_MODE_MAILBOX_KHR, desiredPresentMode))
+	VkPresentModeKHR desiredPresentMode = { 0 };
+	if (!SelectDesiredPresentationMode(physicalDevice, presentationSurface, VK_PRESENT_MODE_MAILBOX_KHR, &desiredPresentMode))
 	{
 		printf("ERROR: Could not use mailbox presentation mode!\n");
 		return false;
 	}
 
-	VkSurfaceCapabilitiesKHR* surfaceCapabilities = nullptr;
-	if (!GetCapabilitiesOfPresentationSurface(physicalDevice, presentationSurface, surfaceCapabilities))
+	VkSurfaceCapabilitiesKHR surfaceCapabilities = { 0 };
+	if (!GetCapabilitiesOfPresentationSurface(physicalDevice, presentationSurface, &surfaceCapabilities))
 	{
 		printf("ERROR: Could not get capabilities of presentation surface!\n");
 		return false;
 	}
 
-	u32* numberOfImages = 0;
-	if (!SelectNumberOfSwapchainImages(surfaceCapabilities, numberOfImages))
+	u32 numberOfImages = { 0 };
+	if (!SelectNumberOfSwapchainImages(&surfaceCapabilities, &numberOfImages))
 	{
 		printf("ERROR: Could not select number of swapchain images!\n");
 		return false;
 	}
 
-	if (!ChooseSizeofSwapchainImages(surfaceCapabilities, imageSize))
+	if (!ChooseSizeofSwapchainImages(&surfaceCapabilities, imageSize))
 	{
 		printf("ERROR: Could not choose size of swapchain images!\n");
 		return false;
 	}
 
-	VkImageUsageFlags* imageUsage = nullptr;
-	if (!SelectDesiredUsageScenariosOfSwapchainImages(surfaceCapabilities, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, imageUsage))
+	VkImageUsageFlags imageUsage = { 0 };
+	if (!SelectDesiredUsageScenariosOfSwapchainImages(&surfaceCapabilities, swapchainImageUsage, &imageUsage))
 	{
 		printf("ERROR: Could not select desired usage scenarios of swapchain images!\n");
 		return false;
 	}
 
-	VkSurfaceTransformFlagBitsKHR* surfaceTransform = nullptr;
-	SelectTransformationOfSwapchainImages(surfaceCapabilities, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, surfaceTransform);
+	VkSurfaceTransformFlagBitsKHR surfaceTransform = { 0 };
+	SelectTransformationOfSwapchainImages(&surfaceCapabilities, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, &surfaceTransform);
 	
-	VkColorSpaceKHR* imageColorSpace = nullptr;
+	VkColorSpaceKHR imageColorSpace = { 0 };
 	VkSurfaceFormatKHR desiredFormat[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-	if (!SelectFormatOfSwapchainImages(physicalDevice, presentationSurface, &desiredFormat[0], imageFormat, imageColorSpace))
+	if (!SelectFormatOfSwapchainImages(physicalDevice, presentationSurface, &desiredFormat[0], imageFormat, &imageColorSpace))
 	{
 		printf("ERROR: Could not select format of swapchain images!\n");
 		return false;
 	}
 
-	VkSurfaceFormatKHR* formatToUse = (VkSurfaceFormatKHR*)malloc(sizeof(VkSurfaceFormatKHR));
-
-	if (!CreateSwapchain(logicalDevice, presentationSurface, numberOfImages, formatToUse, imageSize, imageUsage, surfaceTransform, desiredPresentMode, oldSwapchain, swapchain))
+	if (!CreateSwapchain(logicalDevice, presentationSurface, &numberOfImages, &desiredFormat[0], imageSize, &imageUsage, &surfaceTransform, &desiredPresentMode, oldSwapchain, swapchain))
 	{
 		printf("ERROR: Could not create swapchain!\n");
-		free(formatToUse);
 		return false;
 	}
 
@@ -920,11 +921,9 @@ bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* ph
 	if (swapchainImages == nullptr)
 	{
 		printf("ERROR: Could not get swapchain image handles!\n");
-		free(formatToUse);
 		return false;
 	}
 
 	printf("INFO: Created Swapchain successfully!\n");
-	free(formatToUse);
 	return true;
 }

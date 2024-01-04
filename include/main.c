@@ -6,6 +6,7 @@
 HINSTANCE hInstance;
 HWND hWnd;
 
+
 bool CreateAppInstance(VkInstance* instance)
 {
 	Vec availableExtensions = nullptr;
@@ -28,12 +29,12 @@ bool CreateAppSwapchain(VkInstance* instance, VkSurfaceKHR* presentationSurface,
 {
 	bool Ready = false;
 
-	VkFormat* swapchainImageFormat = nullptr;
-	VkExtent2D* swapchainImageSize = nullptr;
+	VkFormat swapchainImageFormat = { 0 };
+	VkExtent2D swapchainImageSize = { 0 };
 	VkSwapchainKHR swapchain = { 0 };
 	Vec swapchainImages = vec_create(VkImage);
 	
-	if (!CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(physicalDevice, *presentationSurface, *logicalDevice, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, swapchainImageSize, swapchainImageFormat, nullptr, &swapchain, swapchainImages))
+	if (!CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(physicalDevice, presentationSurface, logicalDevice, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &swapchainImageSize, &swapchainImageFormat, nullptr, &swapchain, swapchainImages))
 		return false;
 
 	if (swapchain)
@@ -42,21 +43,18 @@ bool CreateAppSwapchain(VkInstance* instance, VkSurfaceKHR* presentationSurface,
 	return Ready;
 }
 
-bool CreateAppDeviceAndPhysicalDevice(VkInstance* instance, VkDevice* logicalDevice, VkQueue* graphicsQueue, VkQueue* computeQueue, VkSurfaceKHR* PresentationSurface, VkPhysicalDevice* chosenDevice)
+bool CreateAppDeviceAndPhysicalDevice(VkInstance* instance, VkDevice* logicalDevice, VkQueue* graphicsQueue, VkQueue* computeQueue, VkSurfaceKHR* PresentationSurface)
 {
-	WindowPerameters window_parameters = { 0 };
-	window_parameters.HInstance = hInstance;
-	window_parameters.HWnd = hWnd;
 	u32 GraphicsQueueFamilyIndex = 0;
 	u32 PresentQueueFamilyIndex = 0;
 	Vec physicalDevices = nullptr;
 	physicalDevices = EnumerateAvailablePhysicalDevices(instance);
-	if (!CreatePresentationSurface(instance, window_parameters, PresentationSurface))
-		return false;
+
+	VkSurfaceCapabilitiesKHR capabilities;
 
 	for (u32 i = 0; i < vec_length(physicalDevices); ++i)
 	{
-		VkPhysicalDevice* physicalDevice = (VkPhysicalDevice*)vec_get_at(physicalDevices, 0);
+		VkPhysicalDevice* physicalDevice = (VkPhysicalDevice*)vec_get_at(physicalDevices, i);
 		if (!SelectIndexOfQueueFamilyWithDesiredCapabilities(physicalDevice, VK_QUEUE_GRAPHICS_BIT, &GraphicsQueueFamilyIndex)) {
 			return false;
 		}
@@ -64,6 +62,14 @@ bool CreateAppDeviceAndPhysicalDevice(VkInstance* instance, VkDevice* logicalDev
 		if (!SelectQueueFamilyThatSupportsPresentationToGivenSurface(physicalDevice, PresentationSurface, &PresentQueueFamilyIndex)) {
 			return false;
 		}
+
+		if (!GetCapabilitiesOfPresentationSurface(physicalDevice, PresentationSurface, &capabilities))
+		{
+			printf("DEBUG: CreateAppDevice - Presentation Surface After Check (Failed): %p\n", *PresentationSurface);
+			printf("ERROR: Could not get capabilities of presentation surface!\n");
+			return false;
+		}
+
 		Vec priorities = vec_create(float);
 		vec_pushback(priorities, 1.0f, float);
 		QueueInfo infoGraphics = { 0 };
@@ -80,11 +86,10 @@ bool CreateAppDeviceAndPhysicalDevice(VkInstance* instance, VkDevice* logicalDev
 			vec_pushback(requested_queues, infoPresent, QueueInfo);
 		}
 		Vec device_extensions = vec_create(VkExtensionProperties);
-		*chosenDevice = physicalDevice;
-		if (!CreateLogicalDeviceWithWsiExtensionsEnabled(physicalDevice, requested_queues, device_extensions, nullptr, logicalDevice)) 
-		{
+		if (!CreateLogicalDeviceWithWsiExtensionsEnabled(physicalDevice, requested_queues, device_extensions, nullptr, logicalDevice))
 			return false;
-		}
+		else
+			return CreateAppSwapchain(instance, PresentationSurface, logicalDevice, physicalDevice);
 	}
 
 	return true;
@@ -100,7 +105,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 	}
 }
 
-bool CreateWin()
+bool CreateWin(WindowPerameters* params)
 {
 	hInstance = GetModuleHandle(NULL);
 
@@ -134,6 +139,9 @@ bool CreateWin()
 	/* Show the window */
 	ShowWindow(hWnd, SW_SHOWNORMAL);
 
+	params->HInstance = hInstance;
+	params->HWnd = hWnd;
+
 	return true;
 }
 
@@ -154,18 +162,18 @@ bool Start()
 	VkDevice logicalDevice = { 0 };
 	VkQueue GraphicsQueue = { 0 };
 	VkQueue ComputeQueue = { 0 };
-	VkPhysicalDevice chosenDevice;
+	WindowPerameters window_parameters = { 0 };
+
+	if (!CreateWin(&window_parameters))
+		return false;
 
 	if (!CreateAppInstance(&Inst))
 		return false;
 
-	if (!CreateAppDeviceAndPhysicalDevice(&Inst, &logicalDevice, &GraphicsQueue, &ComputeQueue, &PresentationSurface, &chosenDevice))
+	if (!CreatePresentationSurface(&Inst, window_parameters, &PresentationSurface))
 		return false;
 
-	if (!CreateAppSwapchain(&Inst, &PresentationSurface, &logicalDevice, &chosenDevice))
-		return false;
-
-	if (!CreateWin())
+	if (!CreateAppDeviceAndPhysicalDevice(&Inst, &logicalDevice, &GraphicsQueue, &ComputeQueue, &PresentationSurface))
 		return false;
 
 	RunWindow();
