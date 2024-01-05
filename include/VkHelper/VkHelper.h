@@ -559,7 +559,7 @@ bool SelectDesiredPresentationMode(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		if (*crntPresentMode == desiredPresentMode)
 		{
 			*presentMode = desiredPresentMode;
-			printf("Found usable present mode!\n");
+			printf("INFO: Found usable present mode!\n");
 			return true;
 		}
 	}
@@ -572,7 +572,7 @@ bool SelectDesiredPresentationMode(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		if (*crntPresentMode == VK_PRESENT_MODE_FIFO_KHR)
 		{
 			*presentMode = VK_PRESENT_MODE_FIFO_KHR;
-			printf("Using FIFO (V-SYNC) Present Mode!\n");
+			printf("INFO: Using FIFO (V-SYNC) Present Mode!\n");
 			return true;
 		}
 	}
@@ -769,9 +769,13 @@ void VulkanSurfaceCleanup(VkInstance* instance, VkSurfaceKHR* surface)
 
 /* A function to clean up created vulkan resources */
 /* @param A pointer to the resource to cleanup */
-void VulkanSwapchainCleanup()
+void VulkanSwapchainCleanup(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 {
-
+	if (swapchain)
+	{
+		vkDestroySwapchainKHR(*logicalDevice, *swapchain, nullptr);
+		swapchain = VK_NULL_HANDLE;
+	}
 }
 
 /* A function to create a swapchain */
@@ -926,4 +930,77 @@ bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* ph
 
 	printf("INFO: Created Swapchain successfully!\n");
 	return true;
+}
+
+/* A function for aquiring swapchain images */
+/* @param A Pointer to the physical device */
+/* @param A Pointer to the swapchain */
+/* @param A Pointer to a semaphore */
+/* @param A Pointer to a fence */
+/* @param A Pointer to a u32 for output */
+bool AcquireSwapchainImage(VkDevice* logicalDevice, VkSwapchainKHR* swapchain, VkSemaphore* semaphore, VkFence* fence, u32* imageIndex)
+{
+	VkResult result = vkAcquireNextImageKHR(*logicalDevice, *swapchain, 2000000000, *semaphore, *fence, imageIndex);
+	switch (result)
+	{
+		case VK_SUCCESS:
+		case VK_SUBOPTIMAL_KHR:
+			return true;
+		default: 
+			return false;
+	}
+}
+
+/* A Structure for holding information about presenting */
+typedef struct
+{
+	VkSwapchainKHR Swapchain;	/* The swapchain for presentation */
+	u32 ImageIndex;				/* The Image Index of the swapchain image */
+} PresentInfo;
+
+/* A function for presenting a swapchain image to the screen */
+/* @param The queue to call vkQueuePresentKHR on */
+/* @param A Vector of VkSemaphores  (MUST BE VALID) */
+/* @param A Vector of PresentInfo's (MUST BE VALID) */
+bool PresentImage(VkQueue queue, Vec renderingSemaphores, Vec imagesToPresent)
+{
+	VkResult result = VK_SUCCESS;
+	Vec swapchains = vec_create(VkSwapchainKHR);
+	Vec imageIndices = vec_create(u32);
+
+	u32 sizeToReserve = (u32)vec_length(imagesToPresent);
+	swapchains = vec_reserve(VkSwapchainKHR, sizeToReserve);
+	imageIndices = vec_reserve(u32, sizeToReserve);
+
+	/* Old fashioned array / vector loop */
+	for (u32 i = 0; i < sizeToReserve; ++i)
+	{
+		PresentInfo* imageToPresent = (PresentInfo*)vec_get_at(imagesToPresent, i);
+		vec_pushback(swapchains, imageToPresent->Swapchain, VkSwapchainKHR);
+		vec_pushback(imageIndices, imageToPresent->ImageIndex, u32);
+	}
+
+	VkPresentInfoKHR presentInfo = {
+		VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		nullptr,
+		(u32)vec_length(renderingSemaphores),
+		(const VkSemaphore*)renderingSemaphores,
+		(u32)vec_length(swapchains),
+		(const VkSwapchainKHR*)swapchains,
+		(const u32*)imageIndices,
+		nullptr
+	};
+
+	result = vkQueuePresentKHR(queue, &presentInfo);
+	switch (result)
+	{
+		case VK_SUCCESS:
+			vec_destroy(swapchains);
+			vec_destroy(imageIndices);
+			return true;
+		default:
+			vec_destroy(swapchains);
+			vec_destroy(imageIndices);
+			return false;
+	}
 }
