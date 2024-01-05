@@ -247,7 +247,6 @@ void PrintAvailableExtensionsFromVector(Vec extensionsVector)
 	}
 }
 
-
 /* A function to create a logical device */
 /* @param The physical device */
 /* @param A Vector of Queue Infos */
@@ -1004,3 +1003,128 @@ bool PresentImage(VkQueue queue, Vec renderingSemaphores, Vec imagesToPresent)
 			return false;
 	}
 }
+
+/* A function to create a command pool */
+/* @param A Pointer to a device */
+/* @param The flags for creation */
+/* @param A number for the queueFamily */
+/* @param A Pointer to a command pool to be filled */
+bool CreateCommandPool(VkDevice* logicalDevice, VkCommandPoolCreateFlags commandPoolFlags, u32 queueFamily, VkCommandPool* commandPool)
+{
+	VkCommandPoolCreateInfo commandPoolCreateInfo =
+	{
+		VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		nullptr,
+		commandPoolFlags,
+		queueFamily
+	};
+
+	VkResult result = vkCreateCommandPool(logicalDevice, &commandPoolCreateInfo, nullptr, commandPool);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Could not create command pool!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to allocate memory for command buffers */
+/* @param A Pointer to a device */
+/* @param A Pointer to a command pool */
+/* @param A VkCommandBufferLevel */
+/* @param A u32 for the count */
+Vec AllocateCommandBuffers(VkDevice* logicalDevice, VkCommandPool* commandPool, VkCommandBufferLevel level, u32 count)
+{
+	Vec tempVec = vec_create(VkCommandBuffer);
+
+	VkCommandBufferAllocateInfo commandBufferAllocateInfo =
+	{
+		VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		nullptr,
+		commandPool,
+		level,
+		count
+	};
+
+	vec_resize(tempVec, count, VkCommandBuffer);
+
+	VkResult result = vkAllocateCommandBuffers(logicalDevice, &commandBufferAllocateInfo, (VkCommandBuffer*)tempVec);
+	if (VK_SUCCESS != result)
+	{
+		printf("ERROR: Could not allocate command buffers!\n");
+		return nullptr;
+	}
+
+	return tempVec;
+}
+
+/* A function for beginning command buffer recording */
+/* @param A Pointer to a command buffer */
+/* @param A Command Buffer Usage Flags for options when creating */
+/* @param A Pointer to a VkCommandBufferInheritanceInfo */
+bool BeginCommandBufferRecordingOperation(VkCommandBuffer* commandBuffer, VkCommandBufferUsageFlags usage, VkCommandBufferInheritanceInfo* secondaryBufferInfo)
+{
+	VkCommandBufferBeginInfo commandBufferBeginInfo =
+	{
+		VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		nullptr,
+		usage,
+		secondaryBufferInfo
+	};
+
+	VkResult result = vkBeginCommandBuffer(*commandBuffer, &commandBufferBeginInfo);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Could not begin command buffer recording operation!\n");
+		return false;
+	}
+	
+	return true;
+}
+
+/* A function for ending command buffer recording */
+/* @param A Pointer to a command buffer */
+bool EndCommandBufferRecordingOperation(VkCommandBuffer* commandBuffer)
+{
+	VkResult result = vkEndCommandBuffer(*commandBuffer);
+	if (VK_SUCCESS != result)
+	{
+		printf("ERROR: Something went wrong during command buffer recording!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function for resetting a command buffer */
+/* @param A Pointer to a command buffer to reset */
+/* @param An option for releasing resources */
+bool ResetCommandBuffer(VkCommandBuffer* commandBuffer, bool releaseResources)
+{
+	VkResult result = vkResetCommandBuffer(commandBuffer, releaseResources ? VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT : 0);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Error occured during command buffer reset!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function for resetting a command pool which will reset all of it's command buffers */
+/* @param The logical device to do the operation on */
+/* @param The command pool to reset */
+/* @param An option for releasing resources */
+bool ResetCommandPool(VkDevice* logicalDevice, VkCommandPool* commandPool, bool releaseResources)
+{
+	VkResult result = vkResetCommandPool(*logicalDevice, *commandPool, releaseResources ? VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT : 0);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Error occurred during command pool reset!\n");
+		return false;
+	}
+
+	return true;
+}
+
