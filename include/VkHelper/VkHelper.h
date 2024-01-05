@@ -1128,3 +1128,116 @@ bool ResetCommandPool(VkDevice* logicalDevice, VkCommandPool* commandPool, bool 
 	return true;
 }
 
+/* A function to create a semaphore */
+/* @param A Pointer to a device to do the operation on */
+/* @param A Pointer to a semaphore to be filled */
+bool CreateVkSemaphore(VkDevice* logicalDevice, VkSemaphore* semaphore)
+{
+	VkSemaphoreCreateInfo semaphoreCreateInfo =
+	{
+		VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		nullptr,
+		0
+	};
+
+	VkResult result = vkCreateSemaphore(*logicalDevice, &semaphoreCreateInfo, nullptr, semaphore);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Could not create semaphore!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to create a fence */
+/* @param A Pointer to a device to do the operation on */
+/* @param An option ro signal the fence */
+/* @param A Pointer to a fence to be filled in */
+bool CreateFence(VkDevice* logicalDevice, bool signaled, VkFence* fence)
+{
+	VkFenceCreateInfo fenceCreateInfo =
+	{
+		VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		nullptr,
+		signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0u
+	};
+
+	VkResult result = vkCreateFence(*logicalDevice, &fenceCreateInfo, nullptr, fence);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Could not create a fence!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A function to wait on fences */
+/* @param A Poiner to a device to do the operation on */
+/* @param A Vector of fences to do the operation on (MUST BE VALID) */
+/* @param An option for waiting on all of them */
+/* @param A u32 for the timeout in nanoseconds */
+bool WaitForFences(VkDevice* logicalDevice, Vec fences, VkBool32 waitForAll, u64 timeout)
+{
+	if (vec_length(fences) > 0)
+	{
+		VkResult result = vkWaitForFences(logicalDevice, (u32)(vec_length(fences)), (VkFence*)fences, waitForAll, timeout);
+		if (VK_SUCCESS != result)
+		{
+			printf("ERROR: Waiting on fence failed!\n");
+			return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+/* A function to reset a fence */
+/* @param A Poiner to a device to do the operation on */
+/* A Vector of fences to reset */
+bool ResetFences(VkDevice* logicalDevice, Vec fences)
+{
+	if (vec_length(fences) > 0)
+	{
+		VkResult result = vkResetFences(*logicalDevice, (u32)(vec_length(fences)), (VkFence*)fences);
+		if (result != VK_SUCCESS)
+		{
+			printf("ERROR: Error occurred when trying to reset fences!\n");
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+/* A structure for information about waiting on semaphores */
+typedef struct
+{
+	VkSemaphore Semaphore; /* The info's semaphore */
+	VkPipelineStageFlags WaitingStage; /* Information about waiting */
+} WaitSemaphoreInfo;
+
+/* A function for submitting command buffers toi a queue */
+/* @param A Pointer to a VkQueue to use */
+/* @param A Vector of wait semaphore infos (MUST BE VALID) */
+/* @param A Vector of command buffers (MUST BE VALID) */
+/* @param A Vecor of semaphores (MUST BE VALID) */
+/* @param A Pointer to a fence */
+bool SubmitCommandBuffersToQueue(VkQueue* queue, Vec waitSemaphoreInfos, Vec commandBuffers, Vec signalSemaphores, VkFence* fence)
+{
+	Vec waitSemaphoreHandles = vec_create(VkSemaphore);
+	Vec waitSemaphoreStages = vec_create(VkPipelineStageFlags);
+
+	/* Old fashioned loop */
+	for (u32 i = 0; i < vec_length(waitSemaphoreInfos); ++i)
+	{
+		WaitSemaphoreInfo* info = (WaitSemaphoreInfo*)vec_get_at(waitSemaphoreInfos, i);
+		vec_pushback(waitSemaphoreHandles, info->Semaphore, VkSemaphore);
+	}
+
+	vec_destroy(waitSemaphoreHandles);
+	vec_destroy(waitSemaphoreStages);
+}
