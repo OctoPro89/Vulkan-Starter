@@ -1231,13 +1231,87 @@ bool SubmitCommandBuffersToQueue(VkQueue* queue, Vec waitSemaphoreInfos, Vec com
 	Vec waitSemaphoreHandles = vec_create(VkSemaphore);
 	Vec waitSemaphoreStages = vec_create(VkPipelineStageFlags);
 
+	waitSemaphoreHandles = vec_reserve(VkSemaphore, vec_length(waitSemaphoreInfos));
+
 	/* Old fashioned loop */
 	for (u32 i = 0; i < vec_length(waitSemaphoreInfos); ++i)
 	{
 		WaitSemaphoreInfo* info = (WaitSemaphoreInfo*)vec_get_at(waitSemaphoreInfos, i);
 		vec_pushback(waitSemaphoreHandles, info->Semaphore, VkSemaphore);
+		vec_pushback(waitSemaphoreStages, info->WaitingStage, VkPipelineStageFlags);
+	}
+
+	VkSubmitInfo submitInfo =
+	{
+		VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		nullptr,
+		(u32)(vec_length(waitSemaphoreInfos)),
+		(const VkSemaphore*)waitSemaphoreHandles,
+		(const VkPipelineStageFlags*)waitSemaphoreStages,
+		(u32)(vec_length(commandBuffers)),
+		(const VkCommandBuffer*)commandBuffers,
+		(u32)(vec_length(signalSemaphores)),
+		(const VkSemaphore*)signalSemaphores
+	};
+
+	VkResult result = vkQueueSubmit(*queue, 1, &submitInfo, *fence);
+
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Error occurred during command buffer submission!\n");
+		vec_destroy(waitSemaphoreHandles);
+		vec_destroy(waitSemaphoreStages);
+		return false;
 	}
 
 	vec_destroy(waitSemaphoreHandles);
 	vec_destroy(waitSemaphoreStages);
+	return true;
 }
+
+/* A function for syncing two command buffers */
+/* @param A Pointer to a VkQueue for the first queue */
+/* @param A Vector (MUST BE VALID) of the wait semaphore infos */
+/* @param A Vector (MUST BE VALID) of the first command buffers */
+/* @param A Vector (MUST BE VALID) of WaitSemaphoreInfos for the synchronizing */
+/* @param A Pointer to a VkQueue for the second queue */
+/* @param A Vector (MUST BE VALID) of the second command buffers */
+/* @param A Vector (MUST BE VALID) of the signal semaphores */
+/* @param A Pointer to a VkFence for use on operations */
+bool SynchronizeCommandBuffers(VkQueue* firstQueue, Vec waitSemaphoreInfos, Vec firstCommandBuffers, Vec synchronizingSemaphores,
+	VkQueue* secondQueue, Vec secondCommandBuffers, Vec signalSemaphores, VkFence* fence)
+{
+	Vec firstSignalSemaphores = vec_create(VkSemaphore);
+
+	/* Old fashioned array loop */
+	for (u32 i = 0; i < vec_length(synchronizingSemaphores); ++i)
+	{
+		WaitSemaphoreInfo* semaphoreInfo = (WaitSemaphoreInfo*)vec_get_at(synchronizingSemaphores, i);
+		vec_pushback(firstSignalSemaphores, semaphoreInfo->Semaphore, VkSemaphore);
+	}
+
+	if (!SubmitCommandBuffersToQueue(firstQueue, waitSemaphoreInfos, firstCommandBuffers, firstSignalSemaphores, VK_NULL_HANDLE))
+	{
+		vec_destroy(firstSignalSemaphores);
+		return false;
+	}
+
+	if (!SubmitCommandBuffersToQueue(secondQueue, synchronizingSemaphores, secondCommandBuffers, signalSemaphores, fence))
+	{
+		vec_destroy(firstSignalSemaphores);
+		return false;
+	}
+	
+	return true;
+}
+
+/* A function for checking if currently processing submitting command buffers has finished */
+/* @param A Pointer to a VkDevice to do operations on */
+/* @param A Pointer to a VkQueue to do operations on */
+/* @param A Vector (MUST BE VALID) of wait semaphore infos */
+/* @param A Vector (MUST BE VALID) of command buffers */
+/* @param A Vector (MUST BE VALID) of semaphores */
+/* @param A Pointer to a fence to do operations on */
+/* @param A u64 for the timeout */
+/* @param A Pointer to the result for the output wait status */
+bool CheckIfProcessingOfSubmittedCommandBufferHasFinished(VkDevice* logicalDevice, VkQueue* queue)
