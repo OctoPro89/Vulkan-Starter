@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <defines.h>
 #include <string.h>
-#include <vector\vector.h>
+#include <vector/vector.h>
 #include <WindowHelper/WindowHelper.h>
 
 /* A function for checking the available instance extensions */
@@ -242,13 +242,13 @@ void PrintAvailableExtensionsFromVector(Vec extensionsVector)
 	u32 temp = (u32)vec_length(extensionsVector);
 	for (u32 i = 0; i < vec_length(extensionsVector); ++i)
 	{
-		VkExtensionProperties* extension = vec_get_at(extensionsVector, i);
+		VkExtensionProperties* extension = (VkExtensionProperties*)vec_get_at(extensionsVector, i);
 		printf("AVAILABLE EXTENSION: NAME: %s, SPECIFICATION VERSION: %d\n", extension->extensionName, (int)extension->specVersion);
 	}
 }
 
 /* A function to create a logical device */
-/* @param The physical device */
+/* @param The physical devaice */
 /* @param A Vector of Queue Infos */
 /* @param A Vector of strings (const char*) of the desired extensions, pass in null if you don't need extra extensions */
 /* @param Some VkPhysicalDeviceFeatures for the features of the physical device */
@@ -299,11 +299,11 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 	deviceCreateInfo.pNext = nullptr;
 	deviceCreateInfo.flags = 0;
 	deviceCreateInfo.queueCreateInfoCount = (u32)(vec_length(VkDeviceQueueCreateInfo_queue_create_info));
-	deviceCreateInfo.pQueueCreateInfos = vec_length(VkDeviceQueueCreateInfo_queue_create_info) ? vec_get_at(VkDeviceQueueCreateInfo_queue_create_info, 0) : nullptr;
+	deviceCreateInfo.pQueueCreateInfos = vec_length(VkDeviceQueueCreateInfo_queue_create_info) ? (const VkDeviceQueueCreateInfo*)vec_get_at(VkDeviceQueueCreateInfo_queue_create_info, 0) : nullptr;
 	deviceCreateInfo.enabledLayerCount = 0;
 	deviceCreateInfo.ppEnabledLayerNames = nullptr;
 	deviceCreateInfo.enabledExtensionCount = desiredExtensionsLength;
-	deviceCreateInfo.ppEnabledExtensionNames = desiredExtensionsLength > 0 ? vec_get_at(ConstCharPointer_desired_extensions, 0) : nullptr,
+	deviceCreateInfo.ppEnabledExtensionNames = desiredExtensionsLength > 0 ? (const char* const*)vec_get_at(ConstCharPointer_desired_extensions, 0) : nullptr,
 	deviceCreateInfo.pEnabledFeatures = desired_features;
 	
 
@@ -328,9 +328,9 @@ bool CreateLogicalDevice(VkPhysicalDevice* physicalDevice, Vec QueueInfo_queue_i
 /* @param The index of the queue family */
 /* @param The index of the queue */
 /* @param A Pointer to a VkQueue to be output */
-void GetDeviceQueue(VkDevice logicalDevice, u32 queueFamilyIndex, u32 queueIndex, VkQueue* queue)
+void GetDeviceQueue(VkDevice* logicalDevice, u32 queueFamilyIndex, u32 queueIndex, VkQueue* queue)
 {
-	vkGetDeviceQueue(logicalDevice, queueFamilyIndex, queueIndex, queue);
+	vkGetDeviceQueue(*logicalDevice, queueFamilyIndex, queueIndex, queue);
 }
 
 /* A function to create a logical device with geometry shaders and compute queues */
@@ -396,8 +396,8 @@ bool CreateLogicalDeviceWithGeometryShaderAndGraphicsAndComputeQueues(VkInstance
 			continue;
 		}
 		else {
-			GetDeviceQueue(*logicalDevice, graphicsQueueFamilyIndex, 0, graphicsQueue);
-			GetDeviceQueue(*logicalDevice, computeQueueFamilyIndex, 0, computeQueue);
+			GetDeviceQueue(logicalDevice, graphicsQueueFamilyIndex, 0, graphicsQueue);
+			GetDeviceQueue(logicalDevice, computeQueueFamilyIndex, 0, computeQueue);
 			vec_destroy(requestedQueues);
 			vec_destroy(physicalDevices);
 			printf("Chosen device: \"%s\"", deviceProperties.deviceName);
@@ -687,7 +687,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 
 	Vec surfaceFormats = vec_create(VkSurfaceFormatKHR);
 	vec_resize(surfaceFormats, formatsCount, VkSurfaceFormatKHR);
-	result = vkGetPhysicalDeviceSurfaceFormatsKHR(*physicalDevice, *presentationSurface, &formatsCount, surfaceFormats);
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(*physicalDevice, *presentationSurface, &formatsCount, (VkSurfaceFormatKHR*)surfaceFormats);
 	if ((VK_SUCCESS != result) || (formatsCount == 0))
 	{
 		printf("Could not enumerate supported surface formats.\n");
@@ -695,7 +695,7 @@ bool SelectFormatOfSwapchainImages(VkPhysicalDevice* physicalDevice, VkSurfaceKH
 		return false;
 	}
 
-	VkSurfaceFormatKHR* first = vec_get_at(surfaceFormats, 0);
+	VkSurfaceFormatKHR* first = (VkSurfaceFormatKHR*)vec_get_at(surfaceFormats, 0);
 
 	if ((vec_length(surfaceFormats) == 1) && (first->format == VK_FORMAT_UNDEFINED))
 	{
@@ -868,21 +868,21 @@ Vec GetSwapchainImageHandles(VkDevice* logicalDevice, VkSwapchainKHR* swapchain)
 bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* physicalDevice, VkSurfaceKHR* presentationSurface, VkDevice* logicalDevice, VkImageUsageFlags swapchainImageUsage,
 	VkExtent2D* imageSize, VkFormat* imageFormat, VkSwapchainKHR* oldSwapchain, VkSwapchainKHR* swapchain, Vec swapchainImages)
 {
-	VkPresentModeKHR desiredPresentMode = { 0 };
+	VkPresentModeKHR desiredPresentMode;
 	if (!SelectDesiredPresentationMode(physicalDevice, presentationSurface, VK_PRESENT_MODE_MAILBOX_KHR, &desiredPresentMode))
 	{
 		printf("ERROR: Could not use mailbox presentation mode!\n");
 		return false;
 	}
 
-	VkSurfaceCapabilitiesKHR surfaceCapabilities = { 0 };
+	VkSurfaceCapabilitiesKHR surfaceCapabilities;
 	if (!GetCapabilitiesOfPresentationSurface(physicalDevice, presentationSurface, &surfaceCapabilities))
 	{
 		printf("ERROR: Could not get capabilities of presentation surface!\n");
 		return false;
 	}
 
-	u32 numberOfImages = { 0 };
+	u32 numberOfImages ;
 	if (!SelectNumberOfSwapchainImages(&surfaceCapabilities, &numberOfImages))
 	{
 		printf("ERROR: Could not select number of swapchain images!\n");
@@ -895,17 +895,17 @@ bool CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(VkPhysicalDevice* ph
 		return false;
 	}
 
-	VkImageUsageFlags imageUsage = { 0 };
+	VkImageUsageFlags imageUsage;
 	if (!SelectDesiredUsageScenariosOfSwapchainImages(&surfaceCapabilities, swapchainImageUsage, &imageUsage))
 	{
 		printf("ERROR: Could not select desired usage scenarios of swapchain images!\n");
 		return false;
 	}
 
-	VkSurfaceTransformFlagBitsKHR surfaceTransform = { 0 };
+	VkSurfaceTransformFlagBitsKHR surfaceTransform ;
 	SelectTransformationOfSwapchainImages(&surfaceCapabilities, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, &surfaceTransform);
 	
-	VkColorSpaceKHR imageColorSpace = { 0 };
+	VkColorSpaceKHR imageColorSpace;
 	VkSurfaceFormatKHR desiredFormat[] = {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 	if (!SelectFormatOfSwapchainImages(physicalDevice, presentationSurface, &desiredFormat[0], imageFormat, &imageColorSpace))
 	{
@@ -1019,7 +1019,7 @@ bool CreateCommandPool(VkDevice* logicalDevice, VkCommandPoolCreateFlags command
 		queueFamily
 	};
 
-	VkResult result = vkCreateCommandPool(logicalDevice, &commandPoolCreateInfo, nullptr, commandPool);
+	VkResult result = vkCreateCommandPool(*logicalDevice, &commandPoolCreateInfo, nullptr, commandPool);
 	if (result != VK_SUCCESS)
 	{
 		printf("ERROR: Could not create command pool!\n");
@@ -1042,14 +1042,14 @@ Vec AllocateCommandBuffers(VkDevice* logicalDevice, VkCommandPool* commandPool, 
 	{
 		VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		nullptr,
-		commandPool,
+		*commandPool,
 		level,
 		count
 	};
 
 	vec_resize(tempVec, count, VkCommandBuffer);
 
-	VkResult result = vkAllocateCommandBuffers(logicalDevice, &commandBufferAllocateInfo, (VkCommandBuffer*)tempVec);
+	VkResult result = vkAllocateCommandBuffers(*logicalDevice, &commandBufferAllocateInfo, (VkCommandBuffer*)tempVec);
 	if (VK_SUCCESS != result)
 	{
 		printf("ERROR: Could not allocate command buffers!\n");
@@ -1102,7 +1102,7 @@ bool EndCommandBufferRecordingOperation(VkCommandBuffer* commandBuffer)
 /* @param An option for releasing resources */
 bool ResetCommandBuffer(VkCommandBuffer* commandBuffer, bool releaseResources)
 {
-	VkResult result = vkResetCommandBuffer(commandBuffer, releaseResources ? VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT : 0);
+	VkResult result = vkResetCommandBuffer(*commandBuffer, releaseResources ? VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT : 0);
 	if (result != VK_SUCCESS)
 	{
 		printf("ERROR: Error occured during command buffer reset!\n");
@@ -1182,7 +1182,7 @@ bool WaitForFences(VkDevice* logicalDevice, Vec fences, VkBool32 waitForAll, u64
 {
 	if (vec_length(fences) > 0)
 	{
-		VkResult result = vkWaitForFences(logicalDevice, (u32)(vec_length(fences)), (VkFence*)fences, waitForAll, timeout);
+		VkResult result = vkWaitForFences(*logicalDevice, (u32)(vec_length(fences)), (VkFence*)fences, waitForAll, timeout);
 		if (VK_SUCCESS != result)
 		{
 			printf("ERROR: Waiting on fence failed!\n");
@@ -1314,4 +1314,46 @@ bool SynchronizeCommandBuffers(VkQueue* firstQueue, Vec waitSemaphoreInfos, Vec 
 /* @param A Pointer to a fence to do operations on */
 /* @param A u64 for the timeout */
 /* @param A Pointer to the result for the output wait status */
-bool CheckIfProcessingOfSubmittedCommandBufferHasFinished(VkDevice* logicalDevice, VkQueue* queue)
+bool CheckIfProcessingOfSubmittedCommandBufferHasFinished(VkDevice* logicalDevice, VkQueue* queue, Vec waitSemaphoreInfos, Vec commandBuffers,
+	Vec signalSemaphores, VkFence* fence, u64 timeout, VkResult* waitStatus)
+{
+	if (!SubmitCommandBuffersToQueue(queue, waitSemaphoreInfos, commandBuffers, signalSemaphores, fence))
+		return false;
+
+	Vec fenceVec = vec_create(VkFence);
+	vec_pushback(fenceVec, *fence, VkFence);
+
+	if (WaitForFences(logicalDevice, fenceVec, VK_FALSE, timeout))
+	{
+		vec_destroy(fenceVec);
+		return true;
+	}
+
+	vec_destroy(fenceVec);
+	return false;
+}
+
+/* A Pointer to the queue to wait on */
+bool WaitUntilAllCommandsSubmittedToQueueAreFinished(VkQueue* queue)
+{
+	VkResult result = vkQueueWaitIdle(*queue);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Waiting on queue submissions failed!\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* A Pointer to a logical device to wait on */
+bool WaitForAllSubmittedCommandsToBeFinished(VkDevice* logicalDevice)
+{
+	VkResult result = vkDeviceWaitIdle(*logicalDevice);
+	if (result != VK_SUCCESS)
+	{
+		printf("ERROR: Waiting on a device failed!\n");
+		return false;
+	}
+	return true;
+}

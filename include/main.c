@@ -1,12 +1,24 @@
 #include <defines.h>
+#include <windows.h>
 #include <vector/vector.h>
 #include <VkHelper/VkHelper.h>
 
 /* Global variables */
 HINSTANCE hInstance;
 HWND hWnd;
+VkSurfaceKHR PresentationSurface = { 0 };
+VkInstance Inst = { 0 };
+VkDevice logicalDevice = { 0 };
+VkQueue GraphicsQueue = { 0 };
+VkQueue ComputeQueue = { 0 };
+WindowPerameters window_parameters = { 0 };
+VkSwapchainKHR swapchain = { 0 };
+VkSemaphore imageAcquiredSemaphore = { 0 };
+VkSemaphore readyToPresentSemaphore = { 0 };
+Vec swapchainImages = nullptr;
+Vec physicalDevices = nullptr;
 
-bool CreateAppInstance(VkInstance* instance)
+bool CreateAppInstance()
 {
 	Vec availableExtensions = nullptr;
 	Vec desiredExtensions = vec_create(const char*);
@@ -16,7 +28,7 @@ bool CreateAppInstance(VkInstance* instance)
 
 	PrintAvailableExtensionsFromVector(availableExtensions);
 
-	if (!CreateVulkanInstanceWithWsiExtensionsEnabled(desiredExtensions, "nullpointer", instance))
+	if (!CreateVulkanInstanceWithWsiExtensionsEnabled(desiredExtensions, "nullpointer", &Inst))
 		return false;
 
 	vec_destroy(availableExtensions);
@@ -24,15 +36,15 @@ bool CreateAppInstance(VkInstance* instance)
 	return true;
 }
 
-bool CreateAppSwapchain(VkInstance* instance, VkSwapchainKHR* swapchain, VkSurfaceKHR* presentationSurface, VkDevice* logicalDevice, VkPhysicalDevice* physicalDevice)
+bool CreateAppSwapchain(VkPhysicalDevice* PhysicalDevice)
 {
 	bool Ready = false;
 
 	VkFormat swapchainImageFormat = { 0 };
 	VkExtent2D swapchainImageSize = { 0 };
 	Vec swapchainImages = vec_create(VkImage);
-	
-	if (!CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(physicalDevice, presentationSurface, logicalDevice, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &swapchainImageSize, &swapchainImageFormat, nullptr, swapchain, swapchainImages))
+
+	if (!CreateSwapchainWithR8G8B8A8FormatAndMailboxPresentMode(PhysicalDevice, &PresentationSurface, &logicalDevice, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &swapchainImageSize, &swapchainImageFormat, nullptr, &swapchain, swapchainImages))
 		return false;
 
 	if (swapchain)
@@ -41,12 +53,11 @@ bool CreateAppSwapchain(VkInstance* instance, VkSwapchainKHR* swapchain, VkSurfa
 	return Ready;
 }
 
-bool CreateAppDeviceAndPhysicalDeviceAndSwapchain(VkInstance* instance, VkDevice* logicalDevice, VkQueue* graphicsQueue, VkQueue* computeQueue, VkSurfaceKHR* PresentationSurface, VkSwapchainKHR* swapchain)
+bool CreateAppDeviceAndPhysicalDeviceAndSwapchain()
 {
 	u32 GraphicsQueueFamilyIndex = 0;
 	u32 PresentQueueFamilyIndex = 0;
-	Vec physicalDevices = nullptr;
-	physicalDevices = EnumerateAvailablePhysicalDevices(instance);
+	physicalDevices = EnumerateAvailablePhysicalDevices(&Inst);
 
 	VkSurfaceCapabilitiesKHR capabilities;
 
@@ -57,18 +68,19 @@ bool CreateAppDeviceAndPhysicalDeviceAndSwapchain(VkInstance* instance, VkDevice
 			return false;
 		}
 
-		if (!SelectQueueFamilyThatSupportsPresentationToGivenSurface(physicalDevice, PresentationSurface, &PresentQueueFamilyIndex)) {
+		if (!SelectQueueFamilyThatSupportsPresentationToGivenSurface(physicalDevice, &PresentationSurface, &PresentQueueFamilyIndex)) {
 			return false;
 		}
 
-		if (!GetCapabilitiesOfPresentationSurface(physicalDevice, PresentationSurface, &capabilities))
+		if (!GetCapabilitiesOfPresentationSurface(physicalDevice, &PresentationSurface, &capabilities))
 		{
-			printf("DEBUG: CreateAppDevice - Presentation Surface After Check (Failed): %p\n", *PresentationSurface);
+			printf("DEBUG: CreateAppDevice - Presentation Surface After Check (Failed): %p\n", PresentationSurface);
 			printf("ERROR: Could not get capabilities of presentation surface!\n");
 			return false;
 		}
 
-		Vec priorities = vec_create(float);
+		Vec priorities;
+		priorities = vec_create(float);
 		vec_pushback(priorities, 1.0f, float);
 		QueueInfo infoGraphics = { 0 };
 		infoGraphics.FamilyIndex = PresentQueueFamilyIndex;
@@ -84,10 +96,10 @@ bool CreateAppDeviceAndPhysicalDeviceAndSwapchain(VkInstance* instance, VkDevice
 			vec_pushback(requested_queues, infoPresent, QueueInfo);
 		}
 		Vec device_extensions = vec_create(VkExtensionProperties);
-		if (!CreateLogicalDeviceWithWsiExtensionsEnabled(physicalDevice, requested_queues, device_extensions, nullptr, logicalDevice))
+		if (!CreateLogicalDeviceWithWsiExtensionsEnabled(physicalDevice, requested_queues, device_extensions, nullptr, &logicalDevice))
 			return false;
 		else
-			return CreateAppSwapchain(instance, swapchain, PresentationSurface, logicalDevice, physicalDevice);
+			return CreateAppSwapchain(physicalDevice);
 	}
 
 	return true;
@@ -103,7 +115,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 	}
 }
 
-bool CreateWin(WindowPerameters* params)
+bool CreateWin()
 {
 	hInstance = GetModuleHandle(NULL);
 
@@ -121,7 +133,7 @@ bool CreateWin(WindowPerameters* params)
 	}
 
 	/* Create the window */
-	HWND hWnd = CreateWindowEx(
+	hWnd = CreateWindowEx(
 		0,
 		L"nullpointerclass",
 		L"nullpointer",
@@ -137,8 +149,8 @@ bool CreateWin(WindowPerameters* params)
 	/* Show the window */
 	ShowWindow(hWnd, SW_SHOWNORMAL);
 
-	params->HInstance = hInstance;
-	params->HWnd = hWnd;
+	(HINSTANCE*)window_parameters.HInstance = hInstance;
+	(HWND*)window_parameters.HWnd = hWnd;
 
 	return true;
 }
@@ -153,26 +165,26 @@ void RunWindow()
 	}
 }
 
+bool CreateSemaphores()
+{
+
+}
+
 bool Start()
 {
-	VkSurfaceKHR PresentationSurface = { 0 };
-	VkInstance Inst = { 0 };
-	VkDevice logicalDevice = { 0 };
-	VkQueue GraphicsQueue = { 0 };
-	VkQueue ComputeQueue = { 0 };
-	WindowPerameters window_parameters = { 0 };
-	VkSwapchainKHR swapchain = { 0 };
-
-	if (!CreateWin(&window_parameters))
+	if (!CreateWin())
 		return false;
 
-	if (!CreateAppInstance(&Inst))
+	if (!CreateAppInstance())
 		return false;
 
 	if (!CreatePresentationSurface(&Inst, window_parameters, &PresentationSurface))
 		return false;
 
-	if (!CreateAppDeviceAndPhysicalDeviceAndSwapchain(&Inst, &logicalDevice, &GraphicsQueue, &ComputeQueue, &PresentationSurface, &swapchain))
+	if (!CreateAppDeviceAndPhysicalDeviceAndSwapchain())
+		return false;
+
+	if (!CreateSemaphores())
 		return false;
 
 	RunWindow();
@@ -185,9 +197,20 @@ bool Start()
 	return true;
 }
 
+bool Draw()
+{
+	WaitForAllSubmittedCommandsToBeFinished(&logicalDevice);
+
+	u32 imageIndex = 0;
+	//if (!AcquireSwapchainImage(&logicalDevice, &swapchain, &imageAcquiredSemaphore, ))
+		//return false;
+
+	return true;
+}
+
 int main(int argc, char** argv[])
 {
-	
+
 	if (!Start())
 		exit(1);
 
